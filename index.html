@@ -1036,9 +1036,62 @@
   ============================================================ */
   function setTopbarH(){ document.documentElement.style.setProperty('--topbar-h', (document.querySelector('.topbar').offsetHeight)+'px'); }
   window.addEventListener('resize', setTopbarH);
-}
-   /* ===== Démarrage ===== */
-  buildTable(); syncDocTitleFilename(); syncCalTitle(); recalc(); refreshPrintState(); setTopbarH();
+
+ /* ============================================================
+     ÉCOUTEURS GÉNÉRAUX
+        Changer de mois/année réinitialise le calendrier (un CRA
+        par mois) et reconstruit la grille depuis l'état vide.
+  ============================================================ */
+  function changerPeriode(){
+    state.days={}; state.month=parseInt(monthSel.value,10); state.year=parseInt(yearSel.value,10);
+    construireGrille(); construireTableauPdf(); syncNomFichier(); syncTitreCal(); saveSoon();
+  }
+  monthSel.addEventListener('change', changerPeriode);
+  yearSel.addEventListener('change', changerPeriode);
+  document.getElementById('applyAct').addEventListener('click', appliquerActivite);
+  document.getElementById('checkAll').addEventListener('click', joursOuvres);
+  document.getElementById('clearAll').addEventListener('click', toutDecocher);
+  document.getElementById('printBtn').addEventListener('click', imprimer);
+  defAct.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); appliquerActivite(); } });
+
+  /* ============================================================
+     RESTAURATION (reprise du brouillon enregistré localement)
+  ============================================================ */
+  (function restaurer(){
+    construireSemaine();                       // en-têtes Lun → Dim
+    var s=load();
+    if(s){
+      state.fields=s.fields||{}; state.mark=s.mark||'hex'; state.logo=s.logo||null; state.motif=(s.motif!==false);
+      state.tjm=s.tjm||''; state.charges=s.charges||''; state.sig=s.sig||{left:null,right:null}; state.days=s.days||{};
+      if(s.month!=null){ monthSel.value=s.month; state.month=s.month; }
+      if(s.year!=null){ yearSel.value=s.year; state.year=s.year; }
+      document.querySelectorAll('[data-k]').forEach(function(el){
+        if(el.tagName==='INPUT'&&el.type!=='file'&&el.type!=='color'&&el.type!=='checkbox'){
+          if(state.fields[el.dataset.k]!=null) el.value=state.fields[el.dataset.k];
+        }
+      });
+      tjmInput.value=state.tjm; chargesInput.value=state.charges;
+      if(state.fields.docTitle!=null) docTitleEl.value=state.fields.docTitle;
+      if(state.fields.comment!=null) commentEl.innerText=state.fields.comment;
+      appliquerAccent(s.accent||'#E2A400', false); appliquerMotif(state.motif); rendreIcones();
+      if(state.sig.left) pads.left.restore(state.sig.left);
+      if(state.sig.right) pads.right.restore(state.sig.right);
+    } else {
+      state.month=parseInt(monthSel.value,10); state.year=parseInt(yearSel.value,10);
+      appliquerAccent('#E2A400', false); appliquerMotif(true); rendreIcones();
+    }
+  })();
+
+  /* ============================================================
+     DÉMARRAGE
+  ============================================================ */
+  construireGrille();
+  construireTableauPdf();
+  syncNomFichier();
+  syncTitreCal();
+  recalculer();
+  rafraichirPrint();
+  setTopbarH();
 })();
 </script>
 </body>
