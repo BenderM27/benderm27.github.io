@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>CRA</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 30'><path d='M14 1.5 26 8.5v13L14 28.5 2 21.5v-13z' fill='%23FFF6D6' stroke='%23E2A400' stroke-width='2'/><path d='M14 8.5 20 12v6.5L14 22l-6-3.5V12z' fill='%23E2A400'/></svg>">
+<style>
+  :root{
+    /* Couleur d'accent (personnalisable) — tout en dérive via color-mix */
+    --accent:#E2A400;
+    --on-accent:#2a1c00;
+    --accent-top: color-mix(in srgb, #ffffff 14%, var(--accent));
+    --accent-deep: color-mix(in srgb, var(--accent) 55%, #181100);
+    --accent-tint: color-mix(in srgb, var(--accent) 15%, #ffffff);
+    --accent-tint-2: color-mix(in srgb, var(--accent) 7%, #ffffff);
+    --accent-edge: color-mix(in srgb, var(--accent) 42%, #ffffff);
+
+    --ink:#16181D;
+    --ink-soft:#3C424B;
+    --muted:#6A7079;
+    --faint:#A2A8B0;
+    --line:#EAECF0;
+    --line-2:#DFE3E8;
+    --line-3:#CBD0D7;
+    --canvas-top:#F4F5F8;
+    --canvas:#E8EAEF;
+    --paper:#FFFFFF;
+
+    --radius:18px;
+    --radius-md:13px;
+    --radius-sm:10px;
+    --r1:6px;
+    --shadow-soft:0 1px 2px rgba(16,18,24,.05);
+    --shadow-sheet:0 1px 0 rgba(16,18,24,.03), 0 2px 6px rgba(16,18,24,.05), 0 24px 64px -16px rgba(16,18,24,.22);
+    --shadow-pop:0 10px 40px -8px rgba(16,18,24,.30);
+    --font:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    font-family:var(--font); color:var(--ink);
+    background:radial-gradient(1100px 520px at 50% -8%, var(--canvas-top) 0%, var(--canvas) 62%) fixed;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; line-height:1.45;
+    position:relative; overflow-x:hidden;
+  }
+  body.no-motif::before, body.no-motif::after{ display:none; }
+  body::before, body::after{
+    content:""; position:fixed; z-index:0; pointer-events:none;
+    background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='25,3 75,3 98,50 75,97 25,97 2,50' fill='none' stroke='%23000' stroke-width='1.1'/></svg>") no-repeat center/contain;
+    opacity:.06; color:var(--accent);
+  }
+  body::before{ width:520px; height:520px; top:-150px; right:-150px; transform:rotate(8deg); }
+  body::after{ width:360px; height:360px; bottom:-120px; left:-120px; opacity:.05; transform:rotate(-12deg); }
+
+  body.painting, body.painting *{ user-select:none !important; -webkit-user-select:none !important; }
+  .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
+
+  /* ===== Boutons ===== */
+  .btn{
+    font-family:var(--font); font-size:13.5px; font-weight:600; line-height:1;
+    border-radius:11px; padding:10px 15px; cursor:pointer; white-space:nowrap;
+    border:1px solid var(--line-3); background:#fff; color:var(--ink);
+    display:inline-flex; align-items:center; gap:7px;
+    transition:transform .12s ease, box-shadow .16s ease, background .16s ease, border-color .16s ease, color .16s ease;
+  }
+  .btn svg{ flex:0 0 auto; }
+  .btn:hover{ border-color:#B7BEC7; box-shadow:var(--shadow-soft); }
+  .btn:active{ transform:translateY(1px); }
+  .btn:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; }
+  .btn.primary{
+    color:var(--on-accent); border-color:transparent;
+    background:linear-gradient(180deg, var(--accent-top), var(--accent));
+    box-shadow:0 1px 2px rgba(20,18,8,.22), inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  .btn.primary:hover{ filter:brightness(1.04); box-shadow:0 6px 16px -4px color-mix(in srgb, var(--accent) 55%, transparent); }
+  .btn.ghost{ background:transparent; }
+  .btn.small{ padding:8px 12px; font-size:12.5px; border-radius:9px; }
+  .btn.iconly{ padding:9px; }
+
+  /* ===== Topbar ===== */
+  .topbar{
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:10px clamp(12px,4vw,30px); padding-top:max(10px, env(safe-area-inset-top));
+    background:rgba(244,245,248,.74);
+    backdrop-filter:saturate(150%) blur(16px); -webkit-backdrop-filter:saturate(150%) blur(16px);
+    border-bottom:1px solid var(--line);
+  }
+  .brand{ display:flex; align-items:center; gap:10px; min-width:0; }
+  .mark-slot{ flex:0 0 auto; width:28px; height:30px; color:var(--accent); display:inline-flex; }
+  .mark-slot svg{ width:100%; height:100%; }
+  .mark-slot img{ width:100%; height:100%; object-fit:contain; border-radius:6px; }
+  .brand-text{ display:flex; flex-direction:column; line-height:1.12; min-width:0; }
+  .brand-text b{ font-size:14px; font-weight:650; letter-spacing:-.01em; white-space:nowrap; }
+  .brand-text span{ font-size:10.5px; color:var(--muted); letter-spacing:.07em; text-transform:uppercase; white-space:nowrap; }
+  .top-actions{ display:flex; align-items:center; gap:8px; }
+
+  /* ===== Page / feuille ===== */
+  .page{ position:relative; z-index:1; padding:clamp(16px,4vw,44px) clamp(10px,3vw,16px) 110px; display:flex; justify-content:center; }
+  .sheet{
+    width:100%; max-width:920px; background:var(--paper);
+    border-radius:var(--radius); box-shadow:var(--shadow-sheet);
+    padding:clamp(18px,4.2vw,50px) clamp(16px,4.4vw,56px);
+    animation:rise .55s cubic-bezier(.2,.7,.2,1) both;
+  }
+  @keyframes rise{ from{ opacity:0; transform:translateY(12px); } to{ opacity:1; transform:none; } }
+
+  /* ===== En-tête document ===== */
+  .doc-head{ display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px 24px; }
+  .doc-head .lead{ flex:1 1 260px; min-width:220px; }
+  .doc-brand{ display:flex; align-items:center; gap:9px; margin:0 0 9px; }
+  .doc-brand .mark-slot{ width:22px; height:24px; }
+  .eyebrow{ font-size:10.5px; letter-spacing:.18em; text-transform:uppercase; color:var(--accent-deep); font-weight:700; }
+  .title-input{
+    font-family:var(--font); font-weight:720; letter-spacing:-.025em;
+    font-size:clamp(21px,3.3vw,30px); color:var(--ink); line-height:1.1;
+    border:none; outline:none; background:transparent; padding:0; width:100%;
+  }
+  .title-input::placeholder{ color:var(--faint); }
+
+  .period{ display:flex; align-items:center; gap:8px; padding-bottom:3px; }
+  select.field{
+    font-family:var(--font); font-weight:650; font-size:15px; color:var(--ink);
+    appearance:none; -webkit-appearance:none; border:1px solid var(--line-3); background:#fff;
+    border-radius:11px; padding:9px 32px 9px 13px; cursor:pointer;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' fill='none' stroke='%236A7079' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat:no-repeat; background-position:right 11px center;
+    transition:border-color .16s ease, box-shadow .16s ease;
+  }
+  select.field:hover{ border-color:#B7BEC7; }
+  select.field:focus-visible{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3.5px color-mix(in srgb, var(--accent) 22%, transparent); }
+
+  .rule{ height:3px; border:none; margin:22px 0 24px; border-radius:3px;
+    background:linear-gradient(90deg, var(--accent) 0 64px, var(--accent-edge) 64px 88px, var(--line-2) 88px 100%); }
+
+  /* ===== Grille d'informations ===== */
+  .info{ display:grid; grid-template-columns:repeat(2,1fr); gap:16px 36px; }
+  .field{ display:flex; flex-direction:column; gap:5px; }
+  .field > label{ font-size:10px; letter-spacing:.11em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+  .field input.value{
+    font-family:var(--font); font-size:15.5px; color:var(--ink); font-weight:550;
+    border:none; border-bottom:1.5px solid var(--line-2); background:transparent;
+    padding:6px 2px; outline:none; transition:border-color .16s ease; min-width:0;
+  }
+  .field input.value::placeholder{ color:var(--faint); font-weight:400; }
+  .field input.value:hover{ border-bottom-color:var(--line-3); }
+  .field input.value:focus{ border-bottom-color:var(--accent); }
+
+  /* ===== Outils de saisie (écran) ===== */
+  .aids{
+    margin:24px 0 16px; padding:13px 15px;
+    background:linear-gradient(180deg,#F8F9FB,#F4F6F9);
+    border:1px solid var(--line); border-radius:var(--radius-md);
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px 12px;
+  }
+  .aids .tag{ display:inline-flex; align-items:center; gap:7px; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+  .aids .grp{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .def-act{
+    font-family:var(--font); font-size:13.5px; color:var(--ink);
+    border:1px solid var(--line-3); border-radius:10px; padding:9px 12px;
+    min-width:220px; flex:1 1 220px; outline:none; background:#fff;
+    transition:border-color .16s ease, box-shadow .16s ease;
+  }
+  .def-act::placeholder{ color:var(--faint); }
+  .def-act:focus{ border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+  .aids .sep{ width:1px; align-self:stretch; min-height:22px; background:var(--line-2); margin:0 2px; }
+  .hint{ flex-basis:100%; font-size:11.5px; color:var(--faint); margin:2px 0 0; line-height:1.5; }
+  .hint b{ color:var(--muted); font-weight:600; }
+
+  /* ===== Tableau ===== */
+  .table-wrap{ overflow-x:auto; border:1px solid var(--line-2); border-radius:var(--radius-md) var(--radius-md) 0 0; -webkit-overflow-scrolling:touch; }
+  table.cra{ width:100%; border-collapse:collapse; table-layout:fixed; min-width:560px; }
+  table.cra th, table.cra td{ border-bottom:1px solid var(--line); padding:0; }
+  table.cra thead th{
+    font-size:10px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-soft);
+    font-weight:700; text-align:left; background:#F7F8FA; padding:11px 13px;
+    border-bottom:1.5px solid var(--line-2); white-space:nowrap; vertical-align:middle;
+  }
+  table.cra thead th.center{ text-align:center; padding-left:4px; padding-right:4px; }
+  .th-day{ color:var(--accent-deep); }
+  .th-day .gl{ display:inline-block; font-size:13px; line-height:1; }
+
+  .c-day{ text-align:center; }
+  .c-date{ padding:9px 13px !important; white-space:nowrap; }
+  .c-date .dname{ font-size:11px; color:var(--muted); text-transform:capitalize; margin-right:8px; }
+  .c-date .dnum{ font-weight:700; font-variant-numeric:tabular-nums; font-size:14px; letter-spacing:.01em; }
+
+  .c-check{ text-align:center; }
+  .k{ display:none; }
+  .chk{ display:inline-flex; align-items:center; justify-content:center; cursor:pointer; padding:9px 4px; touch-action:manipulation; }
+  .chk input{ position:absolute; opacity:0; width:0; height:0; }
+  .chk .box{
+    width:21px; height:21px; border-radius:var(--r1);
+    border:1.5px solid var(--line-3); background:#fff;
+    display:inline-flex; align-items:center; justify-content:center; position:relative;
+    transition:background .16s ease, border-color .16s ease, transform .12s ease, box-shadow .16s ease;
+  }
+  .chk .box::after{
+    content:""; width:5px; height:9px; margin-top:-1px;
+    border:solid var(--accent-deep); border-width:0 2px 2px 0;
+    transform:rotate(45deg) scale(.35); opacity:0;
+    transition:opacity .13s ease, transform .14s cubic-bezier(.2,.8,.2,1.4);
+  }
+  .chk:hover .box{ border-color:#AEB5BE; }
+  .chk input:focus-visible + .box{ outline:2.5px solid var(--accent); outline-offset:2px; }
+  .chk input:checked + .box{ background:var(--accent-tint); border-color:var(--accent-edge); }
+  .chk input:checked + .box::after{ opacity:1; transform:rotate(45deg) scale(1); }
+  .chk.day .box{ border-radius:7px; }
+  .chk.day input:checked + .box{ background:linear-gradient(180deg,var(--accent-top),var(--accent)); border-color:color-mix(in srgb,var(--accent) 80%,#000); box-shadow:0 1px 2px rgba(20,18,8,.28); }
+  .chk.day input:checked + .box::after{ border-color:var(--on-accent); }
+  .chk.day input:indeterminate + .box{ background:var(--accent-tint); border-color:var(--accent-edge); }
+  .chk.day input:indeterminate + .box::after{ content:""; width:9px; height:2px; border:0; background:var(--accent-deep); transform:none; opacity:1; border-radius:1px; margin:0; }
+
+  td.c-check:has(input:checked){ background:var(--accent-tint); }
+  td.c-day:has(input:checked){ background:var(--accent-tint); }
+  td.c-day:has(input:indeterminate){ background:var(--accent-tint-2); }
+
+  .c-act{ padding:0 !important; }
+  .activity{
+    min-height:39px; padding:10px 13px; outline:none; font-size:13.5px; color:var(--ink);
+    line-height:1.45; word-break:break-word; white-space:pre-wrap; transition:background .14s ease;
+  }
+  .activity:empty::before{ content:attr(data-placeholder); color:var(--faint); }
+  .activity:focus{ background:color-mix(in srgb, var(--accent) 8%, transparent); }
+  tbody tr:hover .c-act .activity{ background:rgba(16,18,24,.018); }
+  tbody tr:hover .c-act .activity:focus{ background:color-mix(in srgb, var(--accent) 8%, transparent); }
+
+  tr.weekend td{ background:#FAFBFC; }
+  tr.weekend .c-date .dname, tr.weekend .c-date .dnum{ color:var(--faint); }
+  tr.weekend td.c-check:has(input:checked){ background:var(--accent-tint); }
+  tr.weekend td.c-day:has(input:checked){ background:var(--accent-tint); }
+
+  /* ===== Barre total ===== */
+  .total-bar{
+    display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+    border:1px solid var(--line-2); border-top:none; border-radius:0 0 var(--radius-md) var(--radius-md);
+    padding:14px 18px; background:linear-gradient(180deg,#FFFFFF,#FCFCFD);
+  }
+  .total-legend{ font-size:11.5px; color:var(--muted); display:inline-flex; align-items:center; gap:8px; }
+  .total-legend .swatch{ width:13px; height:13px; border-radius:4px; background:var(--accent-tint); border:1.5px solid var(--accent-edge); }
+  .total-legend b{ color:var(--ink-soft); font-weight:650; }
+  .total-value{ display:flex; align-items:baseline; gap:9px; }
+  .total-value .lab{ font-size:10.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+  .total-value .num{
+    font-size:30px; font-weight:800; letter-spacing:-.02em; font-variant-numeric:tabular-nums; color:var(--ink);
+    padding-bottom:3px; border-bottom:3px solid var(--accent); transition:color .25s ease;
+  }
+  .total-value .unit{ font-size:14px; font-weight:650; color:var(--ink-soft); }
+  .num.pulse{ animation:pulse .5s ease; }
+  @keyframes pulse{ 0%{ color:var(--accent-deep); } 100%{ color:var(--ink); } }
+
+  /* ===== Estimation TJM (écran) ===== */
+  .est{
+    margin:18px 0 4px; border:1px solid var(--line-2); border-radius:var(--radius-md);
+    padding:15px 17px; background:linear-gradient(180deg,#FBFCFD,#F6F8FA);
+  }
+  .est-head{ display:flex; align-items:center; gap:8px; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700; margin-bottom:12px; }
+  .est-grid{ display:flex; flex-wrap:wrap; gap:14px 22px; align-items:flex-end; }
+  .est-field{ display:flex; flex-direction:column; gap:5px; flex:1 1 140px; }
+  .est-field label{ font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+  .est-field input{
+    font-family:var(--font); font-size:15px; font-weight:600; color:var(--ink);
+    border:1px solid var(--line-3); border-radius:10px; padding:9px 12px; outline:none; background:#fff; width:100%;
+    transition:border-color .16s ease, box-shadow .16s ease;
+  }
+  .est-field input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+  .est-out{ display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+  .est-card{ flex:1 1 120px; background:#fff; border:1px solid var(--line-2); border-radius:11px; padding:11px 13px; }
+  .est-card .l{ font-size:10px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+  .est-card .v{ font-size:19px; font-weight:750; letter-spacing:-.01em; font-variant-numeric:tabular-nums; margin-top:3px; }
+  .est-card.net{ background:color-mix(in srgb, var(--accent) 9%, #fff); border-color:var(--accent-edge); }
+  .est-card.net .v{ color:var(--accent-deep); }
+  .est-note{ font-size:11px; color:var(--faint); margin:12px 0 0; }
+
+  /* ===== Commentaire ===== */
+  .section-label{ font-size:10.5px; letter-spacing:.11em; text-transform:uppercase; color:var(--muted); font-weight:700; margin:30px 0 9px; }
+  .comment{
+    min-height:80px; border:1.5px solid var(--line-2); border-radius:var(--radius-sm);
+    padding:13px 15px; outline:none; font-size:14px; color:var(--ink); line-height:1.55;
+    white-space:pre-wrap; transition:border-color .16s ease, box-shadow .16s ease;
+  }
+  .comment:empty::before{ content:attr(data-placeholder); color:var(--faint); }
+  .comment:hover{ border-color:var(--line-3); }
+  .comment:focus{ border-color:var(--accent); box-shadow:0 0 0 3.5px color-mix(in srgb, var(--accent) 15%, transparent); }
+
+  /* ===== Signatures ===== */
+  .signs{ display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-top:32px; }
+  .sign-card{ display:flex; flex-direction:column; min-width:0; }
+  .sign-role{
+    font-family:var(--font); font-size:13.5px; font-weight:700; color:var(--ink); letter-spacing:-.01em;
+    border:none; border-bottom:1px solid transparent; background:transparent; padding:2px 0; outline:none; width:100%;
+    transition:border-color .16s ease;
+  }
+  .sign-role:hover{ border-bottom-color:var(--line-2); }
+  .sign-role:focus{ border-bottom-color:var(--accent); }
+  .sign-zone{
+    position:relative; margin-top:11px; height:118px;
+    border:1.5px dashed var(--line-3); border-radius:var(--radius-sm);
+    overflow:hidden; background:#FCFCFD; transition:border-color .16s ease, background .16s ease;
+  }
+  .sign-zone.dragover{ border-color:var(--accent); background:color-mix(in srgb, var(--accent) 7%, #fff); }
+  .sign-zone.has-ink{ border-style:solid; border-color:var(--line-2); }
+  .sign-zone canvas{ position:absolute; inset:0; width:100%; height:100%; touch-action:none; cursor:crosshair; }
+  .sign-empty{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:10px; font-size:11.5px; color:var(--faint); pointer-events:none; }
+  .sign-zone.has-ink .sign-empty{ display:none; }
+  .sign-actions{ display:flex; gap:8px; margin-top:9px; align-items:center; flex-wrap:wrap; }
+  .sign-meta{ display:flex; gap:18px; margin-top:11px; }
+  .sign-meta .mini{ display:flex; flex-direction:column; gap:4px; flex:1; min-width:0; }
+  .sign-meta label{ font-size:9.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+  .sign-meta input{
+    font-family:var(--font); font-size:13.5px; color:var(--ink);
+    border:none; border-bottom:1.5px solid var(--line-2); background:transparent; padding:5px 2px; outline:none; min-width:0;
+    transition:border-color .16s ease;
+  }
+  .sign-meta input:focus{ border-bottom-color:var(--accent); }
+  .sign-meta input[type=date]{ width:100%; min-width:0; appearance:none; -webkit-appearance:none; }
+  .date-print{ display:none; }
+
+  .foot-note{ margin-top:34px; font-size:11px; color:var(--faint); text-align:center; }
+
+  /* ===== Tiroir de personnalisation ===== */
+  .overlay{ position:fixed; inset:0; background:rgba(16,18,24,.42); opacity:0; visibility:hidden; transition:opacity .25s ease, visibility .25s ease; z-index:60; backdrop-filter:blur(2px); }
+  .overlay.open{ opacity:1; visibility:visible; }
+  .drawer{
+    position:fixed; top:0; right:0; height:100%; width:min(420px, 92vw); z-index:70;
+    background:#fff; box-shadow:var(--shadow-pop); transform:translateX(100%); transition:transform .3s cubic-bezier(.2,.7,.2,1);
+    display:flex; flex-direction:column; padding-top:env(safe-area-inset-top);
+  }
+  .drawer.open{ transform:none; }
+  .drawer-head{ display:flex; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid var(--line); }
+  .drawer-head h2{ margin:0; font-size:16px; font-weight:700; letter-spacing:-.01em; }
+  .drawer-body{ overflow-y:auto; padding:18px 20px 40px; }
+  .dgroup{ margin-bottom:24px; }
+  .dgroup > h3{ margin:0 0 11px; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+  .swatches{ display:flex; flex-wrap:wrap; gap:9px; align-items:center; }
+  .swatch-btn{ width:30px; height:30px; border-radius:9px; border:2px solid #fff; box-shadow:0 0 0 1px var(--line-3); cursor:pointer; padding:0; transition:transform .12s ease, box-shadow .16s ease; }
+  .swatch-btn:hover{ transform:scale(1.08); }
+  .swatch-btn.active{ box-shadow:0 0 0 2px #fff, 0 0 0 4px var(--ink); }
+  .color-row{ display:flex; align-items:center; gap:10px; margin-top:12px; }
+  .color-row input[type=color]{ width:42px; height:34px; border:1px solid var(--line-3); border-radius:9px; background:#fff; padding:3px; cursor:pointer; }
+  .color-row span{ font-size:12.5px; color:var(--muted); }
+  .marks{ display:flex; flex-wrap:wrap; gap:9px; }
+  .mark-btn{ width:46px; height:46px; border-radius:11px; border:1.5px solid var(--line-3); background:#fff; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; color:var(--accent); transition:border-color .16s ease, transform .12s ease; }
+  .mark-btn:hover{ transform:translateY(-1px); border-color:#B7BEC7; }
+  .mark-btn.active{ border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+  .mark-btn svg{ width:24px; height:26px; }
+  .drow{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:12px; }
+  .drow .lbl{ font-size:13px; color:var(--ink-soft); }
+  .logo-preview{ width:46px; height:46px; border-radius:11px; border:1px solid var(--line-2); object-fit:contain; background:#fff; display:none; }
+  .logo-preview.show{ display:inline-block; }
+  /* interrupteur */
+  .switch{ position:relative; width:44px; height:26px; flex:0 0 auto; }
+  .switch input{ position:absolute; opacity:0; width:0; height:0; }
+  .switch .track{ position:absolute; inset:0; background:var(--line-3); border-radius:99px; transition:background .18s ease; }
+  .switch .thumb{ position:absolute; top:3px; left:3px; width:20px; height:20px; background:#fff; border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:transform .18s ease; }
+  .switch input:checked + .track{ background:var(--accent); }
+  .switch input:checked + .track + .thumb{ transform:translateX(18px); }
+  .dnote{ font-size:11.5px; color:var(--faint); line-height:1.5; margin:10px 0 0; }
+  .danger{ color:#C0392B; border-color:color-mix(in srgb,#C0392B 30%,var(--line-3)); }
+  .danger:hover{ border-color:#C0392B; background:#FFF5F4; }
+
+  /* ===== Responsive ===== */
+  @media (max-width:760px){
+    .brand-text{ display:none; }
+  }
+  @media (max-width:640px){
+    .doc-head{ flex-direction:column; align-items:stretch; gap:14px; }
+    .period{ justify-content:flex-start; }
+    .info{ grid-template-columns:1fr; }
+    .signs{ grid-template-columns:1fr; }
+    .aids .sep{ display:none; }
+    .total-value .num{ font-size:26px; }
+
+    /* Tableau -> cartes empilées (mobile) */
+    .table-wrap{ overflow:visible; border:none; }
+    table.cra{ min-width:0; display:block; }
+    table.cra thead{ display:none; }
+    table.cra tbody{ display:block; }
+    table.cra tr{
+      display:block; border:1px solid var(--line-2); border-radius:12px;
+      padding:11px 12px; margin-bottom:10px; background:#fff;
+    }
+    table.cra tr.weekend{ background:#FAFBFC; }
+    table.cra td{ display:block; border:none; padding:0; }
+    .c-date{ padding:0 !important; margin-bottom:9px; font-size:15px; }
+    .c-date .dname{ font-size:13px; }
+    .c-date .dnum{ font-size:16px; }
+    .c-day, .c-check{ display:inline-flex; align-items:center; gap:8px; margin:0 10px 6px 0; padding:6px 11px 6px 8px; border-radius:99px; border:1px solid var(--line-2); }
+    td.c-check:has(input:checked), td.c-day:has(input:checked){ background:var(--accent-tint); border-color:var(--accent-edge); }
+    td.c-day:has(input:indeterminate){ background:var(--accent-tint-2); }
+    .k{ display:inline; font-size:12.5px; font-weight:600; color:var(--ink-soft); }
+    .chk{ padding:0; }
+    .c-act{ margin-top:6px; }
+    .activity{ border:1px solid var(--line-2); border-radius:9px; min-height:42px; }
+  }
+  @media (max-width:380px){
+    .top-actions .btn span{ display:none; }
+    .top-actions .btn{ padding:9px; }
+  }
+  @media (prefers-reduced-motion:reduce){ *{ animation:none !important; transition:none !important; } }
+</style>
+
+<!-- ===== Styles d'impression (compacts, lisibles, 1 page) — pilotables pour la mesure ===== -->
+<style id="printRules" media="print">
+  @page{ size:A4 portrait; margin:8mm; }
+  html,body{ background:#fff !important; }
+  body::before, body::after{ display:none !important; }
+  *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+  .topbar, .aids, .est, .foot-note, .sign-actions, .overlay, .drawer, .no-print{ display:none !important; }
+  .page{ padding:0; display:block; }
+  .sheet{ max-width:none; width:auto; box-shadow:none; border-radius:0; padding:0; animation:none; margin:0 auto; }
+
+  .doc-brand{ margin:0 0 4px; }
+  .doc-brand .mark-slot{ width:18px; height:19px; }
+  .eyebrow{ font-size:8px; letter-spacing:.16em; }
+  .title-input{ font-size:17px; font-weight:720; }
+  .doc-head{ gap:6px 16px; align-items:center; }
+  .rule{ margin:8px 0 10px; height:2px; }
+  .period{ gap:5px; padding-bottom:0; }
+  select.field{ border:none; background:none; padding:0; -webkit-appearance:none; appearance:none; font-size:14px; font-weight:700; }
+
+  .info{ display:grid !important; grid-template-columns:repeat(2,1fr) !important; gap:7px 26px; }
+  .field{ gap:2px; }
+  .field > label{ font-size:8px; letter-spacing:.07em; }
+  .field input.value{ font-size:12px; padding:1px 1px; border-bottom-color:var(--line-2); }
+
+  .table-wrap{ overflow:visible !important; border:1px solid var(--line-2) !important; border-radius:0; margin-top:2px; }
+  table.cra{ min-width:0 !important; display:table !important; table-layout:fixed; }
+  table.cra thead{ display:table-header-group !important; }
+  table.cra tbody{ display:table-row-group !important; }
+  table.cra tr{ display:table-row !important; border:none !important; padding:0 !important; margin:0 !important; background:transparent !important; }
+  table.cra td{ display:table-cell !important; }
+  table.cra th, table.cra td{ border-bottom:.75px solid var(--line) !important; }
+  table.cra thead th{ padding:4px 8px; font-size:8px; letter-spacing:.05em; background:#F3F4F6 !important; border-bottom-width:1px; }
+  .th-day .gl{ font-size:11px; }
+  .k{ display:none !important; }
+  .c-day, .c-check{ border:none !important; border-radius:0 !important; margin:0 !important; padding:0 !important; display:table-cell !important; text-align:center; }
+  .c-date{ padding:2.5px 8px !important; margin:0 !important; }
+  .c-date .dname{ font-size:9px; margin-right:6px; }
+  .c-date .dnum{ font-size:11px; }
+  .chk{ padding:2.5px 2px; }
+  .chk .box{ width:13px; height:13px; border-width:1px; border-radius:3px; }
+  .chk.day .box{ border-radius:3px; }
+  .chk .box::after{ width:3.5px; height:7px; border-width:0 1.5px 1.5px 0; margin-top:-1px; }
+  .chk.day input:indeterminate + .box::after{ width:7px; height:1.5px; }
+  .activity{ border:none !important; border-radius:0 !important; min-height:0; padding:2.5px 8px; font-size:10px; line-height:1.3; }
+  .activity:empty::before{ content:""; }
+
+  .total-bar{ padding:7px 13px; }
+  .total-legend{ font-size:8.5px; }
+  .total-legend .swatch{ width:10px; height:10px; }
+  .total-value .lab{ font-size:8px; letter-spacing:.1em; }
+  .total-value .num{ font-size:19px; padding-bottom:1px; border-bottom-width:2.5px; }
+  .total-value .unit{ font-size:11px; }
+
+  .section-label{ margin:11px 0 5px; font-size:9px; letter-spacing:.09em; color:var(--muted); }
+  .comment{ min-height:36px; padding:8px 11px; font-size:10.5px; line-height:1.4; box-shadow:none; border-width:1px; border-color:var(--line-2); border-radius:6px; }
+  .comment:empty::before{ content:""; }
+
+  .signs{ gap:24px; margin-top:14px; }
+  .sign-role{ font-size:11px; border-bottom:none; font-weight:700; margin-bottom:1px; }
+  .sign-zone{ height:64px; margin-top:7px; border-style:solid; border-width:1px; border-color:var(--line-3); border-radius:6px; background:#fff; }
+  .sign-empty{ display:none !important; }
+  .sign-meta{ margin-top:9px; gap:16px; }
+  .sign-meta label{ font-size:8px; color:var(--muted); }
+  .sign-meta input{ font-size:10.5px; padding:1px 2px 4px; min-height:17px; border-bottom:1px solid #A8AEB6; }
+  .m-date{ display:none !important; }
+  .date-print{ display:block; font-size:10.5px; padding:1px 2px 4px; min-height:17px; border-bottom:1px solid #A8AEB6; color:var(--ink); }
+
+  /* Masquage si vide */
+  body.no-title .title-input{ display:none !important; }
+  body.no-comment .section-label, body.no-comment .comment{ display:none !important; }
+
+  tr, .sign-card, .total-bar{ break-inside:avoid; }
+  .activity:focus, .comment:focus,
+  td.c-check:has(input:checked), td.c-day:has(input:checked){ box-shadow:none; }
+</style>
+</head>
+<body>
+
+  <!-- ====== Topbar ====== -->
+  <div class="topbar">
+    <div class="brand">
+      <span class="mark-slot" id="markTop"></span>
+      <div class="brand-text">
+        <b>Générateur de CRA</b>
+        <span>Compte rendu d'activité</span>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="btn small ghost" id="openSettings" title="Personnaliser">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Personnaliser</span>
+      </button>
+      <button class="btn primary" id="printBtn" title="Exporter en PDF">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        <span>PDF</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ====== Feuille ====== -->
+  <div class="page">
+    <div class="sheet" id="sheet">
+
+      <div class="doc-head">
+        <div class="lead">
+          <div class="doc-brand"><span class="mark-slot" id="markDoc"></span><span class="eyebrow" id="eyebrow">Compte rendu d'activité</span></div>
+          <input class="title-input" id="docTitle" placeholder="Titre du document" aria-label="Titre du document">
+        </div>
+        <div class="period">
+          <select class="field" id="monthSel" aria-label="Mois"></select>
+          <select class="field" id="yearSel" aria-label="Année"></select>
+        </div>
+      </div>
+
+      <hr class="rule">
+
+      <div class="info">
+        <div class="field"><label for="fSociete">Société sous-traitante</label><input class="value" id="fSociete" data-k="societe" placeholder="Votre dénomination"></div>
+        <div class="field"><label for="fClient">Client final</label><input class="value" id="fClient" data-k="client" placeholder="Client final"></div>
+        <div class="field"><label for="fConsultant">Consultant — Prénom &amp; Nom</label><input class="value" id="fConsultant" data-k="consultant" placeholder="Prénom NOM"></div>
+        <div class="field"><label for="fDest">Société destinataire</label><input class="value" id="fDest" data-k="dest" placeholder="Société destinataire / ESN"></div>
+      </div>
+
+      <div class="aids no-print">
+        <span class="tag">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          Outils
+        </span>
+        <div class="grp">
+          <input class="def-act" id="defAct" placeholder="Activité par défaut — ex. Développement web — Client">
+          <button class="btn small" id="applyAct">Appliquer aux jours travaillés</button>
+        </div>
+        <div class="sep"></div>
+        <div class="grp">
+          <button class="btn small" id="checkAll">Tout cocher (jours ouvrés)</button>
+          <button class="btn small ghost" id="clearAll">Tout décocher</button>
+        </div>
+        <p class="hint">Coche la <b>case de gauche</b> pour une <b>journée complète</b> (matin + après-midi). Au PC, tu peux <b>cliquer-glisser</b> sur les cases pour en cocher plusieurs d'un coup. Une demi-journée = <b>0,5 jour</b> ; le total se calcule automatiquement.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table class="cra">
+          <colgroup>
+            <col style="width:6%"><col style="width:24%"><col style="width:13%"><col style="width:14%"><col style="width:43%">
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="center th-day" title="Journée complète (matin + après-midi)"><span class="gl" aria-hidden="true">✓</span><span class="sr-only">Journée complète</span></th>
+              <th>Date</th>
+              <th class="center">Matin</th>
+              <th class="center">Après-midi</th>
+              <th>Activité réalisée</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="total-bar">
+        <div class="total-legend"><span class="swatch" aria-hidden="true"></span>Une demi-journée cochée = <b>0,5 jour</b></div>
+        <div class="total-value">
+          <span class="lab">Total à facturer</span>
+          <span class="num" id="totalNum">0</span>
+          <span class="unit">jours</span>
+        </div>
+      </div>
+
+      <!-- Estimation (écran uniquement) -->
+      <div class="est no-print">
+        <div class="est-head">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Estimation de revenu
+        </div>
+        <div class="est-grid">
+          <div class="est-field"><label for="tjm">TJM (€ / jour)</label><input id="tjm" data-k="tjm" type="number" inputmode="decimal" min="0" step="10" placeholder="0"></div>
+          <div class="est-field"><label for="charges">Charges (%)</label><input id="charges" data-k="charges" type="number" inputmode="decimal" min="0" max="100" step="1" placeholder="0"></div>
+        </div>
+        <div class="est-out">
+          <div class="est-card"><div class="l">Jours</div><div class="v" id="estDays">0</div></div>
+          <div class="est-card"><div class="l">CA brut</div><div class="v" id="estCa">0 €</div></div>
+          <div class="est-card net"><div class="l">Estimation nette</div><div class="v" id="estNet">0 €</div></div>
+        </div>
+        <p class="est-note">Indicatif, calculé sur les jours cochés. N'apparaît pas dans le PDF.</p>
+      </div>
+
+      <p class="section-label">Commentaire</p>
+      <div class="comment" id="comment" contenteditable="true" data-placeholder="Remarques, congés, jours fériés, précisions sur la période…" role="textbox" aria-multiline="true" aria-label="Commentaire"></div>
+
+      <div class="signs">
+        <div class="sign-card">
+          <input class="sign-role" id="roleLeft" data-k="roleLeft" value="Le sous-traitant" aria-label="Rôle du signataire (gauche)">
+          <div class="sign-zone" data-key="left"><canvas></canvas><span class="sign-empty">Signez à la souris / au doigt, ou déposez une image</span></div>
+          <div class="sign-actions no-print">
+            <label class="btn small ghost">Importer…<input type="file" class="sig-file" accept="image/*" hidden></label>
+            <button class="btn small ghost sig-clear" type="button">Effacer</button>
+          </div>
+          <div class="sign-meta">
+            <div class="mini"><label>Nom</label><input class="m-name" data-k="nameLeft"></div>
+            <div class="mini"><label>Date</label><input class="m-date" type="date" data-k="dateLeft"><span class="date-print"></span></div>
+          </div>
+        </div>
+
+        <div class="sign-card">
+          <input class="sign-role" id="roleRight" data-k="roleRight" value="Le destinataire" aria-label="Rôle du signataire (droite)">
+          <div class="sign-zone" data-key="right"><canvas></canvas><span class="sign-empty">Signez à la souris / au doigt, ou déposez une image</span></div>
+          <div class="sign-actions no-print">
+            <label class="btn small ghost">Importer…<input type="file" class="sig-file" accept="image/*" hidden></label>
+            <button class="btn small ghost sig-clear" type="button">Effacer</button>
+          </div>
+          <div class="sign-meta">
+            <div class="mini"><label>Nom</label><input class="m-name" data-k="nameRight"></div>
+            <div class="mini"><label>Date</label><input class="m-date" type="date" data-k="dateRight"><span class="date-print"></span></div>
+          </div>
+        </div>
+      </div>
+
+      <p class="foot-note no-print">Données enregistrées localement sur cet appareil uniquement. Vérifiez les informations avant envoi.</p>
+
+    </div>
+  </div>
+
+  <!-- ====== Tiroir personnalisation ====== -->
+  <div class="overlay" id="overlay"></div>
+  <aside class="drawer" id="drawer" aria-hidden="true" aria-label="Personnalisation">
+    <div class="drawer-head">
+      <h2>Personnalisation</h2>
+      <button class="btn small ghost iconly" id="closeSettings" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="drawer-body">
+
+      <div class="dgroup">
+        <h3>Couleur d'accent</h3>
+        <div class="swatches" id="swatches"></div>
+        <div class="color-row">
+          <input type="color" id="accentPicker" value="#E2A400" aria-label="Couleur personnalisée">
+          <span>Couleur personnalisée</span>
+        </div>
+      </div>
+
+      <div class="dgroup">
+        <h3>Icône / logo</h3>
+        <div class="marks" id="marks"></div>
+        <div class="drow">
+          <span class="lbl">Logo personnalisé</span>
+          <div style="display:flex; align-items:center; gap:9px;">
+            <img class="logo-preview" id="logoPreview" alt="">
+            <label class="btn small ghost">Importer<input type="file" id="logoFile" accept="image/*" hidden></label>
+            <button class="btn small ghost" id="logoRemove" type="button">Retirer</button>
+          </div>
+        </div>
+        <p class="dnote">Le logo remplace l'icône dans l'en-tête et apparaît sur le PDF.</p>
+      </div>
+
+      <div class="dgroup">
+        <h3>Affichage</h3>
+        <div class="drow">
+          <span class="lbl">Motif hexagone en fond</span>
+          <label class="switch"><input type="checkbox" id="motifToggle" checked><span class="track"></span><span class="thumb"></span></label>
+        </div>
+      </div>
+
+      <div class="dgroup">
+        <h3>Mes données</h3>
+        <p class="dnote">Vos informations, couleur, logo, TJM et signatures sont enregistrés uniquement dans ce navigateur, sur cet appareil. Rien n'est envoyé en ligne.</p>
+        <div style="margin-top:12px;"><button class="btn small danger" id="clearData" type="button">Effacer mes données enregistrées</button></div>
+      </div>
+
+    </div>
+  </aside>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============================================================
+     CONSTANTES
+  ============================================================ */
+  var MONTHS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+  var WD = ["Dim.","Lun.","Mar.","Mer.","Jeu.","Ven.","Sam."];
+
+  // Jeu d'icônes (utilisent currentColor -> couleur d'accent)
+  var MARKS = {
+    hex:'<svg viewBox="0 0 28 30" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M14 1.5 26 8.5v13L14 28.5 2 21.5v-13z"/><path d="M14 8.5 20 12v6.5L14 22l-6-3.5V12z" fill="currentColor" stroke="none"/></svg>',
+    drop:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c4 5 7 8.6 7 12a7 7 0 1 1-14 0c0-3.4 3-7 7-12z"/></svg>',
+    doc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4M9 12h6M9 16h6"/></svg>',
+    spark:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>',
+    bolt:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>',
+    leaf:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 19c0-9 7-15 15-15 0 9-6 15-15 15z"/><path d="M5 19C9 13 13 11 17 9" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round" opacity=".5"/></svg>'
+  };
+  var SWATCHES = ["#E2A400","#2563EB","#0EA5A5","#15A66B","#7C5CFC","#EC4899","#E5484D","#334155"];
+
+  /* ============================================================
+     ÉLÉMENTS
+  ============================================================ */
+  var monthSel = document.getElementById('monthSel');
+  var yearSel  = document.getElementById('yearSel');
+  var tbody    = document.getElementById('tbody');
+  var totalNum = document.getElementById('totalNum');
+  var defAct   = document.getElementById('defAct');
+  var tjmInput = document.getElementById('tjm');
+  var chargesInput = document.getElementById('charges');
+  var estDays = document.getElementById('estDays'), estCa = document.getElementById('estCa'), estNet = document.getElementById('estNet');
+
+  /* ============================================================
+     ÉTAT + PERSISTANCE LOCALE (protégée)
+  ============================================================ */
+  var LS = (function(){ try{ var t='__cra__'; localStorage.setItem(t,'1'); localStorage.removeItem(t); return localStorage; }catch(e){ return null; } })();
+  var STORE_KEY = 'cra_app_v2';
+  var state = {
+    fields:{}, accent:'#E2A400', mark:'hex', logo:null, motif:true,
+    tjm:'', charges:'', sig:{ left:null, right:null }
+  };
+  var saveTimer = null;
+  function save(){ if(!LS) return; try{ LS.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){} }
+  function saveSoon(){ if(saveTimer) clearTimeout(saveTimer); saveTimer=setTimeout(save,300); }
+  function load(){ if(!LS) return null; try{ return JSON.parse(LS.getItem(STORE_KEY)||'null'); }catch(e){ return null; } }
+
+  /* ============================================================
+     MOIS / ANNÉE  (sélection auto du mois et de l'année en cours)
+  ============================================================ */
+  var now = new Date();
+  MONTHS.forEach(function(m,i){ var o=document.createElement('option'); o.value=i; o.textContent=m; monthSel.appendChild(o); });
+  monthSel.value = now.getMonth();
+  var curY = now.getFullYear();
+  for (var y=curY-2; y<=curY+3; y++){ var oy=document.createElement('option'); oy.value=y; oy.textContent=y; yearSel.appendChild(oy); }
+  yearSel.value = curY;
+
+  /* ============================================================
+     FORMATS
+  ============================================================ */
+  function fmt(n){ return Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ','); }
+  function fmtEur(n){ return (n||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:0,maximumFractionDigits:2}); }
+
+  /* ============================================================
+     CONSTRUCTION DU TABLEAU
+  ============================================================ */
+  function buildTable(){
+    var m = parseInt(monthSel.value,10), y = parseInt(yearSel.value,10);
+    var nb = new Date(y, m+1, 0).getDate();
+    var html = '';
+    for (var d=1; d<=nb; d++){
+      var wd = new Date(y,m,d).getDay();
+      var weekend = (wd===0 || wd===6);
+      var dd = (d<10?'0'+d:''+d);
+      html +=
+        '<tr'+(weekend?' class="weekend"':'')+'>'+
+          '<td class="c-day"><span class="k">Journée</span><label class="chk day"><input type="checkbox" class="full" aria-label="Journée complète"><span class="box"></span></label></td>'+
+          '<td class="c-date"><span class="dname">'+WD[wd]+'</span><span class="dnum">'+dd+'</span></td>'+
+          '<td class="c-check"><span class="k">Matin</span><label class="chk"><input type="checkbox" class="am" aria-label="Matin"><span class="box"></span></label></td>'+
+          '<td class="c-check"><span class="k">Après-midi</span><label class="chk"><input type="checkbox" class="pm" aria-label="Après-midi"><span class="box"></span></label></td>'+
+          '<td class="c-act"><div class="activity" contenteditable="true" data-placeholder="—"></div></td>'+
+        '</tr>';
+    }
+    tbody.innerHTML = html;
+    recalc();
+  }
+
+  /* ============================================================
+     CALCUL DU TOTAL + ESTIMATION
+  ============================================================ */
+  function recalc(){
+    var checked = tbody.querySelectorAll('input.am:checked, input.pm:checked').length;
+    var total = checked * 0.5;
+    var txt = fmt(total);
+    if (totalNum.textContent !== txt){
+      totalNum.textContent = txt;
+      totalNum.classList.remove('pulse'); void totalNum.offsetWidth; totalNum.classList.add('pulse');
+    }
+    updateEstimation(total);
+  }
+  function updateEstimation(days){
+    var tjm = parseFloat(tjmInput.value)||0;
+    var ch  = parseFloat(chargesInput.value)||0;
+    var ca  = days * tjm;
+    var net = ca * (1 - ch/100);
+    estDays.textContent = fmt(days);
+    estCa.textContent = fmtEur(ca);
+    estNet.textContent = fmtEur(net);
+  }
+
+  /* ============================================================
+     CASE "JOURNÉE" <-> MATIN / APRÈS-MIDI
+  ============================================================ */
+  function syncFull(tr){
+    var am = tr.querySelector('.am').checked, pm = tr.querySelector('.pm').checked;
+    var full = tr.querySelector('.full');
+    full.checked = am && pm; full.indeterminate = (am !== pm);
+  }
+  function syncAllFull(){ tbody.querySelectorAll('tr').forEach(syncFull); }
+
+  // Applique une valeur à une case en propageant la logique métier
+  function applyToggle(input, value){
+    if (input.classList.contains('full')){
+      input.checked = value; input.indeterminate = false;
+      var tr = input.closest('tr');
+      tr.querySelector('.am').checked = value;
+      tr.querySelector('.pm').checked = value;
+    } else {
+      input.checked = value;
+      syncFull(input.closest('tr'));
+    }
+  }
+
+  /* ============================================================
+     ACTIONS GROUPÉES
+  ============================================================ */
+  function checkAllWorkdays(){
+    tbody.querySelectorAll('tr').forEach(function(tr){
+      var we = tr.classList.contains('weekend');
+      tr.querySelector('.am').checked = !we;
+      tr.querySelector('.pm').checked = !we;
+    });
+    syncAllFull(); recalc();
+  }
+  function clearAll(){
+    tbody.querySelectorAll('input[type="checkbox"]').forEach(function(cb){ cb.checked=false; cb.indeterminate=false; });
+    recalc();
+  }
+  function applyDefaultActivity(){
+    var v = defAct.value.trim(); if(!v){ defAct.focus(); return; }
+    tbody.querySelectorAll('tr').forEach(function(tr){
+      if (tr.querySelector('.am').checked || tr.querySelector('.pm').checked){ tr.querySelector('.activity').textContent = v; }
+    });
+  }
+
+  /* ============================================================
+     CLIC-GLISSER POUR COCHER (souris / stylet)
+  ============================================================ */
+  var painting=false, paintVal=null;
+  tbody.addEventListener('pointerdown', function(e){
+    if (e.pointerType === 'touch' || e.button !== 0) return;   // tactile : tap normal + scroll
+    var chk = e.target.closest('.chk'); if(!chk) return;
+    var input = chk.querySelector('input');
+    paintVal = !input.checked;                 // état cible après le clic natif
+    painting = true;
+    document.body.classList.add('painting');
+    // le clic natif coche la 1re case ; on peint les suivantes au survol
+  });
+  tbody.addEventListener('pointermove', function(e){
+    if (!painting) return;
+    var el = document.elementFromPoint(e.clientX, e.clientY);
+    var chk = el && el.closest ? el.closest('.chk') : null;
+    if (!chk || !tbody.contains(chk)) return;
+    var input = chk.querySelector('input');
+    if (input.checked !== paintVal){ applyToggle(input, paintVal); recalc(); }
+  });
+  function endPaint(){ if(!painting) return; painting=false; document.body.classList.remove('painting'); }
+  window.addEventListener('pointerup', endPaint);
+  window.addEventListener('pointercancel', endPaint);
+
+  /* ============================================================
+     ÉCOUTEUR DE COCHES (clics simples)
+  ============================================================ */
+  tbody.addEventListener('change', function(e){
+    var t = e.target; if(!t || t.type!=='checkbox') return;
+    applyToggle(t, t.checked);
+    recalc();
+  });
+
+  /* ============================================================
+     PERSONNALISATION : couleur, icône, logo, motif
+  ============================================================ */
+  function luminance(hex){
+    var c = hex.replace('#',''); if(c.length===3) c=c.split('').map(function(x){return x+x;}).join('');
+    var r=parseInt(c.substr(0,2),16)/255, g=parseInt(c.substr(2,2),16)/255, b=parseInt(c.substr(4,2),16)/255;
+    function f(v){ return v<=0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055,2.4); }
+    return 0.2126*f(r)+0.7152*f(g)+0.0722*f(b);
+  }
+  function applyAccent(hex, persist){
+    state.accent = hex;
+    document.documentElement.style.setProperty('--accent', hex);
+    document.documentElement.style.setProperty('--on-accent', luminance(hex) > 0.55 ? '#241a00' : '#ffffff');
+    var picker = document.getElementById('accentPicker'); if(picker) picker.value = (hex.length===7?hex:picker.value);
+    document.querySelectorAll('.swatch-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.c.toLowerCase()===hex.toLowerCase()); });
+    if (persist!==false) saveSoon();
+  }
+  function renderMarks(){
+    var html = state.logo ? '<img src="'+state.logo+'" alt="">' : MARKS[state.mark];
+    document.getElementById('markTop').innerHTML = html;
+    document.getElementById('markDoc').innerHTML = html;
+    document.querySelectorAll('.mark-btn').forEach(function(b){ b.classList.toggle('active', !state.logo && b.dataset.m===state.mark); });
+    var lp = document.getElementById('logoPreview');
+    if (state.logo){ lp.src = state.logo; lp.classList.add('show'); } else { lp.classList.remove('show'); lp.removeAttribute('src'); }
+  }
+  function applyMotif(on){ state.motif = !!on; document.body.classList.toggle('no-motif', !on); document.getElementById('motifToggle').checked = !!on; }
+
+  // Construire les swatches + boutons d'icônes
+  (function buildCustomUI(){
+    var sw = document.getElementById('swatches');
+    SWATCHES.forEach(function(c){
+      var b=document.createElement('button'); b.className='swatch-btn'; b.type='button'; b.dataset.c=c; b.style.background=c;
+      b.setAttribute('aria-label','Couleur '+c);
+      b.addEventListener('click', function(){ applyAccent(c); });
+      sw.appendChild(b);
+    });
+    var mk = document.getElementById('marks');
+    Object.keys(MARKS).forEach(function(id){
+      var b=document.createElement('button'); b.className='mark-btn'; b.type='button'; b.dataset.m=id; b.innerHTML=MARKS[id];
+      b.setAttribute('aria-label','Icône '+id);
+      b.addEventListener('click', function(){ state.logo=null; state.mark=id; renderMarks(); saveSoon(); });
+      mk.appendChild(b);
+    });
+  })();
+
+  document.getElementById('accentPicker').addEventListener('input', function(e){ applyAccent(e.target.value); });
+  document.getElementById('logoFile').addEventListener('change', function(e){
+    var f=e.target.files&&e.target.files[0]; if(!f) return;
+    var r=new FileReader(); r.onload=function(ev){ state.logo=ev.target.result; renderMarks(); saveSoon(); }; r.readAsDataURL(f);
+    e.target.value='';
+  });
+  document.getElementById('logoRemove').addEventListener('click', function(){ state.logo=null; renderMarks(); saveSoon(); });
+  document.getElementById('motifToggle').addEventListener('change', function(e){ applyMotif(e.target.checked); saveSoon(); });
+
+  /* ============================================================
+     TIROIR
+  ============================================================ */
+  var drawer=document.getElementById('drawer'), overlay=document.getElementById('overlay');
+  function openDrawer(){ drawer.classList.add('open'); overlay.classList.add('open'); drawer.setAttribute('aria-hidden','false'); }
+  function closeDrawer(){ drawer.classList.remove('open'); overlay.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); }
+  document.getElementById('openSettings').addEventListener('click', openDrawer);
+  document.getElementById('closeSettings').addEventListener('click', closeDrawer);
+  overlay.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDrawer(); });
+
+  document.getElementById('clearData').addEventListener('click', function(){
+    if (!confirm('Effacer toutes les données enregistrées sur cet appareil (infos, couleur, logo, TJM, signatures) ?')) return;
+    if (LS){ try{ LS.removeItem(STORE_KEY); }catch(e){} }
+    location.reload();
+  });
+
+  /* ============================================================
+     SIGNATURES : dessin souris/tactile + import fichier + glisser-déposer
+  ============================================================ */
+  function initSignPad(zone){
+    var key = zone.dataset.key;
+    var canvas = zone.querySelector('canvas');
+    var ctx = canvas.getContext('2d');
+    canvas.width = 600; canvas.height = 220;                 // buffer fixe -> insensible au redimensionnement
+    ctx.lineWidth = 3.2; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#1f2937';
+    var drawing=false, last=null;
+
+    function pos(e){
+      var r = canvas.getBoundingClientRect();
+      return { x:(e.clientX-r.left)*(canvas.width/r.width), y:(e.clientY-r.top)*(canvas.height/r.height) };
+    }
+    function start(e){ drawing=true; last=pos(e); e.preventDefault(); }
+    function move(e){
+      if(!drawing) return;
+      var p=pos(e); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke();
+      last=p; zone.classList.add('has-ink'); e.preventDefault();
+    }
+    function end(){ if(!drawing) return; drawing=false; persist(); }
+    canvas.addEventListener('pointerdown', start);
+    canvas.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+
+    function persist(){ try{ state.sig[key] = canvas.toDataURL('image/png'); saveSoon(); }catch(e){} }
+    function clearPad(){ ctx.clearRect(0,0,canvas.width,canvas.height); zone.classList.remove('has-ink'); state.sig[key]=null; saveSoon(); }
+    function drawImage(src, persistIt){
+      var img=new Image();
+      img.onload=function(){
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        var s=Math.min(canvas.width/img.width, canvas.height/img.height);
+        var w=img.width*s, h=img.height*s;
+        ctx.drawImage(img,(canvas.width-w)/2,(canvas.height-h)/2,w,h);
+        zone.classList.add('has-ink');
+        if(persistIt) persist();
+      };
+      img.src=src;
+    }
+
+    var card = zone.closest('.sign-card');
+    card.querySelector('.sig-file').addEventListener('change', function(e){
+      var f=e.target.files&&e.target.files[0]; if(!f) return;
+      var r=new FileReader(); r.onload=function(ev){ drawImage(ev.target.result, true); }; r.readAsDataURL(f); e.target.value='';
+    });
+    card.querySelector('.sig-clear').addEventListener('click', clearPad);
+
+    // Glisser-déposer une image directement sur la zone
+    ['dragenter','dragover'].forEach(function(ev){ zone.addEventListener(ev, function(e){ e.preventDefault(); zone.classList.add('dragover'); }); });
+    ['dragleave','drop'].forEach(function(ev){ zone.addEventListener(ev, function(e){ e.preventDefault(); zone.classList.remove('dragover'); }); });
+    zone.addEventListener('drop', function(e){
+      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f && /^image\//.test(f.type)){ var r=new FileReader(); r.onload=function(ev){ drawImage(ev.target.result, true); }; r.readAsDataURL(f); }
+    });
+
+    return { restore:function(src){ if(src) drawImage(src, false); } };
+  }
+  var pads = {};
+  document.querySelectorAll('.sign-zone').forEach(function(z){ pads[z.dataset.key] = initSignPad(z); });
+
+  /* ============================================================
+     LIAISON DES CHAMPS PERSISTÉS (texte)
+  ============================================================ */
+  function bindField(el){
+    var k = el.dataset.k;
+    el.addEventListener('input', function(){
+      state.fields[k] = el.value;
+      if (k==='societe' || k==='dest') {} // (les rôles signataires sont éditables séparément)
+      if (el === document.getElementById('docTitle')) {}
+      syncDocTitleFilename();
+      saveSoon();
+    });
+  }
+  document.querySelectorAll('[data-k]').forEach(function(el){
+    if (el.tagName === 'INPUT' && el.type !== 'file' && el.type !== 'color' && el.type !== 'checkbox'){ bindField(el); }
+  });
+  // titre & estimation déclenchent aussi des recalculs
+  document.getElementById('docTitle').addEventListener('input', syncDocTitleFilename);
+  tjmInput.addEventListener('input', function(){ recalc(); });
+  chargesInput.addEventListener('input', function(){ recalc(); });
+
+  /* ============================================================
+     NOM DE FICHIER PDF
+  ============================================================ */
+  function syncDocTitleFilename(){
+    var soc = (document.getElementById('fSociete').value || 'CRA').trim();
+    var m = MONTHS[parseInt(monthSel.value,10)], y = yearSel.value;
+    document.title = ('CRA_'+soc+'_'+m+'_'+y).replace(/[^\w\u00C0-\u017F]+/g,'_').replace(/^_+|_+$/g,'') || 'CRA';
+  }
+
+  /* ============================================================
+     AFFICHAGE PDF : date formatée + masquage des éléments vides
+  ============================================================ */
+  var docTitleEl = document.getElementById('docTitle');
+  var commentEl  = document.getElementById('comment');
+
+  function fmtDateFr(v){ if(!v) return ''; var p=v.split('-'); return (p.length===3) ? (p[2]+'/'+p[1]+'/'+p[0]) : v; }
+  function updateDateSpans(){
+    document.querySelectorAll('.m-date').forEach(function(inp){
+      var span = inp.parentNode.querySelector('.date-print');
+      if (span) span.textContent = fmtDateFr(inp.value);
+    });
+  }
+  function updateNoTitle(){ document.body.classList.toggle('no-title', !docTitleEl.value.trim()); }
+  function updateNoComment(){ document.body.classList.toggle('no-comment', !(commentEl.innerText||'').trim()); }
+  function refreshPrintState(){ updateNoTitle(); updateNoComment(); updateDateSpans(); }
+
+  docTitleEl.addEventListener('input', updateNoTitle);
+  commentEl.addEventListener('input', updateNoComment);
+  document.querySelectorAll('.m-date').forEach(function(inp){
+    inp.addEventListener('input', updateDateSpans);
+    inp.addEventListener('change', updateDateSpans);
+  });
+
+  /* ============================================================
+     EXPORT PDF : ajustement "une seule page" par mesure réelle
+  ============================================================ */
+  var fitStyle = null;
+  function fitStyleEl(){ if(!fitStyle){ fitStyle=document.createElement('style'); fitStyle.id='cra-fit'; fitStyle.media='print'; document.head.appendChild(fitStyle); } return fitStyle; }
+  function applyFit(){
+    try{
+      refreshPrintState();
+      var pr = document.getElementById('printRules'), sheet = document.getElementById('sheet');
+      var mmToPx = 96/25.4, marginMm = 8;
+      var pageH = (297-2*marginMm)*mmToPx, pageW = (210-2*marginMm)*mmToPx;
+      var target = pageH*0.96;
+      var wasMedia = pr.media; pr.media='all';
+      var pw=sheet.style.width, pmw=sheet.style.maxWidth, pz=sheet.style.zoom;
+      sheet.style.zoom=''; sheet.style.maxWidth='none'; sheet.style.width=pageW+'px';
+      var h = sheet.getBoundingClientRect().height;
+      sheet.style.width=pw; sheet.style.maxWidth=pmw; sheet.style.zoom=pz;
+      pr.media = wasMedia || 'print';
+      var z = (h>target) ? Math.max(0.5, target/h) : 1;
+      fitStyleEl().textContent = (z<1) ? ('#sheet{ zoom:'+z.toFixed(3)+'; }') : '';
+    }catch(e){ if(fitStyle) fitStyle.textContent=''; }
+  }
+  function clearFit(){ if(fitStyle) fitStyle.textContent=''; }
+  window.addEventListener('beforeprint', applyFit);
+  window.addEventListener('afterprint', clearFit);
+  function doPrint(){ applyFit(); window.print(); }
+
+  /* ============================================================
+     ÉCOUTEURS GÉNÉRAUX
+  ============================================================ */
+  monthSel.addEventListener('change', function(){ buildTable(); syncDocTitleFilename(); });
+  yearSel.addEventListener('change',  function(){ buildTable(); syncDocTitleFilename(); });
+  document.getElementById('applyAct').addEventListener('click', applyDefaultActivity);
+  document.getElementById('checkAll').addEventListener('click', checkAllWorkdays);
+  document.getElementById('clearAll').addEventListener('click', clearAll);
+  document.getElementById('printBtn').addEventListener('click', doPrint);
+  defAct.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); applyDefaultActivity(); } });
+
+  /* ============================================================
+     RESTAURATION DE L'ÉTAT
+  ============================================================ */
+  (function restore(){
+    var s = load();
+    if (s){
+      state.fields = s.fields || {};
+      state.mark = s.mark || 'hex';
+      state.logo = s.logo || null;
+      state.motif = (s.motif !== false);
+      state.tjm = s.tjm || ''; state.charges = s.charges || '';
+      state.sig = s.sig || { left:null, right:null };
+      // champs texte
+      document.querySelectorAll('[data-k]').forEach(function(el){
+        if (el.tagName==='INPUT' && el.type!=='file' && el.type!=='color' && el.type!=='checkbox'){
+          if (state.fields[el.dataset.k] != null) el.value = state.fields[el.dataset.k];
+        }
+      });
+      tjmInput.value = state.tjm; chargesInput.value = state.charges;
+      applyAccent(s.accent || '#E2A400', false);
+      applyMotif(state.motif);
+      renderMarks();
+      if (state.sig.left) pads.left.restore(state.sig.left);
+      if (state.sig.right) pads.right.restore(state.sig.right);
+    } else {
+      applyAccent('#E2A400', false);
+      applyMotif(true);
+      renderMarks();
+    }
+  })();
+
+  /* ============================================================
+     DÉMARRAGE
+  ============================================================ */
+  buildTable();
+  syncDocTitleFilename();
+  recalc();
+  refreshPrintState();
+})();
+</script>
+</body>
+</html>
