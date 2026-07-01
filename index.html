@@ -3,6 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- Politique de sécurité du contenu (défense en profondeur). connect-src 'none' verrouille
+     techniquement la promesse de confidentialité : aucune sortie réseau (fetch/XHR/beacon/WS)
+     n'est possible. Le HTML/CSS/JS vit en un seul fichier (inline), d'où 'unsafe-inline' ;
+     img-src autorise les dataURL (logo, signatures, favicon). Aucune ressource externe. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'">
 <title>CRA</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 30'><path d='M14 1.5 26 8.5v13L14 28.5 2 21.5v-13z' fill='%23FFF6D6' stroke='%23E2A400' stroke-width='2'/><path d='M14 8.5 20 12v6.5L14 22l-6-3.5V12z' fill='%23E2A400'/></svg>">
 <style>
@@ -88,6 +93,19 @@
   .brand-text span{ font-size:10.5px; color:var(--muted); letter-spacing:.07em; text-transform:uppercase; white-space:nowrap; }
   .top-actions{ display:flex; align-items:center; gap:8px; }
 
+  /* Témoin d'état de sauvegarde — reflète le résultat de save() (dérivé, ne stocke rien) */
+  .save-witness{ display:inline-flex; align-items:center; gap:6px; padding:4px 9px; border-radius:99px; background:var(--paper-2); border:1px solid var(--line-2); font-size:11px; font-weight:600; color:var(--muted); white-space:nowrap; max-width:min(46vw,220px); overflow:hidden; }
+  .save-witness[hidden]{ display:none; }
+  .save-witness .sw-dot{ flex:0 0 auto; width:7px; height:7px; border-radius:50%; background:var(--faint); transition:background .16s var(--ease); }
+  .save-witness .sw-text{ overflow:hidden; text-overflow:ellipsis; }
+  .save-witness.is-cours .sw-dot{ background:var(--accent); animation:sw-blink 1s var(--ease) infinite; }
+  .save-witness.is-ok .sw-dot{ background:#15A66B; }
+  .save-witness.is-ok{ color:var(--muted); }
+  .save-witness.is-warn{ color:#B23A1E; border-color:color-mix(in srgb,#C0392B 26%,var(--line-2)); background:#FFF6F4; }
+  .save-witness.is-warn .sw-dot{ background:#C0392B; }
+  @keyframes sw-blink{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
+  @media (prefers-reduced-motion:reduce){ .save-witness.is-cours .sw-dot{ animation:none; } }
+
   /* ============================================================
      4. STRUCTURE GÉNÉRALE
   ============================================================ */
@@ -99,8 +117,15 @@
   .doc-brand{ display:flex; align-items:center; gap:9px; margin:0 0 9px; }
   .doc-brand .mark-slot{ width:22px; height:24px; }
   .eyebrow{ font-size:10.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--accent-deep); font-weight:700; }
-  .title-input{ font-family:var(--font); font-weight:730; letter-spacing:-.03em; font-size:clamp(21px,3vw,29px); color:var(--ink); line-height:1.08; border:none; outline:none; background:transparent; padding:0; width:100%; }
+  /* Badge « Provisoire » à l'écran — piloté par body.provisoire, texte + forme (pas couleur seule) */
+  .prov-badge{ display:none; align-items:center; gap:5px; font-size:9.5px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; color:#B23A1E; background:#FFF1EC; border:1px solid color-mix(in srgb,#C0392B 32%,#fff); border-radius:99px; padding:2px 9px; white-space:nowrap; }
+  .prov-badge::before{ content:""; width:6px; height:6px; border-radius:50%; background:#C0392B; flex:0 0 auto; }
+  body.provisoire .prov-badge{ display:inline-flex; }
+  /* Filigrane « Provisoire » — masqué à l'écran, révélé à l'impression via body.provisoire */
+  .prov-watermark{ display:none; }
+  .title-input{ font-family:var(--font); font-weight:730; letter-spacing:-.03em; font-size:clamp(21px,3vw,29px); color:var(--ink); line-height:1.08; border:none; outline:none; background:transparent; padding:0; width:100%; border-radius:6px; }
   .title-input::placeholder{ color:var(--faint); }
+  .title-input:focus-visible{ outline:2.5px solid var(--accent); outline-offset:3px; }
   .period{ display:flex; align-items:center; gap:8px; padding-bottom:3px; }
   select.field{ font-family:var(--font); font-weight:650; font-size:15px; color:var(--ink); appearance:none; -webkit-appearance:none; border:1px solid var(--line-3); background:#fff; border-radius:11px; padding:9px 32px 9px 13px; cursor:pointer; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' fill='none' stroke='%23697079' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>"); background-repeat:no-repeat; background-position:right 11px center; transition:border-color .16s var(--ease), box-shadow .16s var(--ease); }
   select.field:hover{ border-color:#B7BEC7; }
@@ -113,7 +138,7 @@
      5. DÉCLENCHEUR CALENDRIER (mobile) + EN-TÊTES
   ============================================================ */
   .cal-trigger{ display:none; width:100%; justify-content:space-between; padding:14px 16px; font-size:15px; border-radius:14px; }
-  .cal-trigger .cal-count{ font-weight:750; color:var(--accent-deep); background:var(--accent-fill); border:1px solid var(--accent-edge); padding:3px 10px; border-radius:99px; font-size:13px; }
+  .cal-trigger .cal-count{ font-weight:750; color:var(--accent-deep); background:var(--accent-fill-2); border:1px solid var(--accent-edge); padding:3px 10px; border-radius:99px; font-size:13px; }
   .cal-trigger .lhs{ display:inline-flex; align-items:center; gap:9px; }
   .cal-mobile-head{ display:none; }
   .cal-head{ display:flex; align-items:center; gap:9px; margin-bottom:12px; }
@@ -140,8 +165,27 @@
   .def-act::placeholder{ color:var(--faint); }
   .def-act:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-ring); }
   .aids .sep{ width:1px; align-self:stretch; min-height:22px; background:var(--line-2); margin:0 2px; }
-  .hint{ flex-basis:100%; font-size:11.5px; color:var(--faint); margin:2px 0 0; line-height:1.5; }
-  .hint b{ color:var(--muted); font-weight:600; }
+  .hint{ flex-basis:100%; font-size:11.5px; color:var(--muted); margin:2px 0 0; line-height:1.5; }
+  .hint b{ color:var(--ink-soft); font-weight:600; }
+
+  /* Modèles d'activité (presets) — dérivent de state.presets, jamais dupliqués */
+  .presets{ flex-basis:100%; display:flex; flex-wrap:wrap; align-items:center; gap:7px; min-width:0; }
+  .preset-add{ display:inline-flex; align-items:center; gap:5px; flex:0 0 auto; font-family:var(--font); font-size:12px; font-weight:600; color:var(--muted); background:#fff; border:1px dashed var(--line-3); border-radius:99px; padding:5px 11px; cursor:pointer; transition:border-color .16s var(--ease), color .16s var(--ease), background .16s var(--ease); }
+  .preset-add:hover{ border-color:var(--accent-edge); color:var(--accent-deep); background:var(--accent-fill-2); }
+  .preset-add:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; }
+  .preset-add svg{ flex:0 0 auto; }
+  .preset-empty{ font-size:11.5px; color:var(--muted); flex:1 1 auto; min-width:0; }
+  .preset-empty.hide{ display:none; }
+  .preset-list{ display:contents; }
+  .preset-chip{ display:inline-flex; align-items:center; gap:2px; flex:0 1 auto; max-width:100%; min-width:0; background:var(--accent-fill-2); border:1px solid var(--accent-edge); border-radius:99px; padding:0 3px 0 0; overflow:hidden; }
+  .preset-fill{ font-family:var(--font); font-size:12px; font-weight:600; color:var(--accent-deep); background:transparent; border:none; padding:5px 3px 5px 11px; cursor:pointer; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  .preset-fill:hover{ text-decoration:underline; }
+  .preset-fill:focus-visible{ outline:2.5px solid var(--accent); outline-offset:1px; border-radius:99px; }
+  .preset-del{ flex:0 0 auto; width:20px; height:20px; display:inline-grid; place-items:center; border:none; background:transparent; color:var(--accent-deep); opacity:.6; border-radius:50%; cursor:pointer; transition:opacity .14s var(--ease), background .14s var(--ease); }
+  .preset-del:hover{ opacity:1; background:color-mix(in srgb, var(--accent) 18%, #fff); }
+  .preset-del:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; opacity:1; }
+  .preset-del svg{ width:11px; height:11px; }
+  @media screen and (max-width:699px){ .preset-fill{ font-size:15px; padding-top:7px; padding-bottom:7px; } .preset-add{ font-size:13px; padding:7px 12px; } .preset-del{ width:26px; height:26px; } }
 
   /* ============================================================
      8. CALENDRIER — PIÈCE MAÎTRESSE (vue écran, en grille)
@@ -255,7 +299,7 @@
   .est-card .v{ font-size:18px; font-weight:750; letter-spacing:-.01em; font-variant-numeric:tabular-nums; margin-top:3px; }
   .est-card.net{ background:color-mix(in srgb, var(--accent) 9%, #fff); border-color:var(--accent-edge); }
   .est-card.net .v{ color:var(--accent-deep); }
-  .est-note{ font-size:11px; color:var(--faint); margin:11px 0 0; }
+  .est-note{ font-size:11px; color:var(--muted); margin:11px 0 0; }
 
   /* ============================================================
      11. COMMENTAIRE
@@ -278,7 +322,7 @@
   .sign-zone.dragover{ border-color:var(--accent); background:color-mix(in srgb, var(--accent) 7%, #fff); }
   .sign-zone.has-ink{ border-style:solid; border-color:var(--line-2); }
   .sign-zone canvas{ position:absolute; inset:0; width:100%; height:100%; touch-action:none; cursor:crosshair; }
-  .sign-empty{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:10px; font-size:11.5px; color:var(--faint); pointer-events:none; }
+  .sign-empty{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:10px; font-size:11.5px; color:var(--muted); pointer-events:none; }
   .sign-zone.has-ink .sign-empty{ display:none; }
   .sign-actions{ display:flex; gap:8px; margin-top:9px; align-items:center; flex-wrap:wrap; }
   .sign-meta{ display:flex; gap:18px; margin-top:11px; }
@@ -288,7 +332,7 @@
   .sign-meta input:focus{ border-bottom-color:var(--accent); }
   .sign-meta input[type=date]{ width:100%; min-width:0; appearance:none; -webkit-appearance:none; }
   .date-print{ display:none; }
-  .foot-note{ font-size:11px; color:var(--faint); text-align:center; margin:4px 0 0; }
+  .foot-note{ font-size:11px; color:var(--muted); text-align:center; margin:4px 0 0; }
 
   /* ============================================================
      13. FICHE DU JOUR (mobile) + TIROIR DE PERSONNALISATION
@@ -325,9 +369,28 @@
   .switch .thumb{ position:absolute; top:3px; left:3px; width:20px; height:20px; background:#fff; border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:transform .18s var(--ease); }
   .switch input:checked + .track{ background:var(--accent); }
   .switch input:checked + .track + .thumb{ transform:translateX(18px); }
-  .dnote{ font-size:11.5px; color:var(--faint); line-height:1.5; margin:10px 0 0; }
+  .dnote{ font-size:11.5px; color:var(--muted); line-height:1.5; margin:10px 0 0; }
   .danger{ color:#C0392B; border-color:color-mix(in srgb,#C0392B 30%,var(--line-3)); }
   .danger:hover{ border-color:#C0392B; background:#FFF5F4; }
+
+  /* Export / import de données */
+  .data-actions{ display:flex; flex-wrap:wrap; gap:9px; margin-top:12px; }
+  .data-actions .btn{ flex:1 1 auto; justify-content:center; min-width:0; }
+
+  /* Profils d'identité */
+  .prof-add{ display:flex; gap:8px; margin-top:12px; align-items:stretch; }
+  .prof-name{ flex:1 1 auto; min-width:0; font-family:var(--font); font-size:13.5px; color:var(--ink); border:1px solid var(--line-3); border-radius:10px; padding:9px 12px; outline:none; background:#fff; transition:border-color .16s var(--ease), box-shadow .16s var(--ease); }
+  .prof-name::placeholder{ color:var(--faint); }
+  .prof-name:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-ring); }
+  .prof-add .btn{ flex:0 0 auto; }
+  .prof-list{ display:flex; flex-direction:column; gap:8px; margin-top:12px; }
+  .prof-list:empty{ display:none; }
+  .prof-item{ display:flex; align-items:center; gap:10px; padding:9px 11px; border:1px solid var(--line-2); border-radius:11px; background:var(--paper-2); min-width:0; }
+  .prof-item .pi-name{ flex:1 1 auto; min-width:0; font-size:13.5px; font-weight:600; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .prof-item .pi-actions{ display:flex; gap:6px; flex:0 0 auto; }
+  .prof-item .btn.small{ padding:6px 10px; font-size:12px; }
+  .prof-empty{ margin-top:10px; }
+  .prof-empty.hide{ display:none; }
 
   /* Fiche du jour — feuille basse mobile */
   .day-sheet{ position:fixed; left:0; right:0; bottom:0; z-index:80; background:#fff; border-radius:20px 20px 0 0; box-shadow:var(--shadow-pop); transform:translateY(100%); transition:transform .3s var(--ease); padding:0 18px calc(18px + env(safe-area-inset-bottom)); overscroll-behavior:contain; }
@@ -538,14 +601,28 @@
   body.no-title .title-input{ display:none !important; }
   body.no-comment .section-label, body.no-comment .comment{ display:none !important; }
   .print-table tr, .sign-card, .total-bar{ break-inside:avoid; }
+
+  /* Filigrane « Provisoire » sur le PDF : overlay absolu DERRIÈRE le contenu.
+     Ancré sur .page (conteneur d'impression) → n'ajoute rien à la hauteur de #sheet
+     mesurée par appliquerFit(), donc l'auto-fit une-page reste intact. */
+  .page{ position:relative !important; }
+  body.provisoire .prov-watermark{ display:flex !important; position:absolute; inset:0; z-index:0; align-items:center; justify-content:center; pointer-events:none; overflow:hidden; }
+  body.provisoire .prov-watermark span{ font-size:110px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:color-mix(in srgb,#C0392B 30%, transparent); transform:rotate(-32deg); white-space:nowrap; border:6px solid color-mix(in srgb,#C0392B 24%, transparent); padding:14px 40px; border-radius:14px; }
+  body.provisoire .sheet{ position:relative; z-index:1; }
 </style>
 </head>
 <body>
 
-  <div class="topbar">
+  <!-- Région d'annonces pour lecteurs d'écran (total, actions groupées, imports…) -->
+  <div class="sr-only" id="liveRegion" aria-live="polite" role="status"></div>
+
+  <div class="topbar" role="banner">
     <div class="brand">
       <span class="mark-slot" id="markTop"></span>
       <div class="brand-text"><b>Générateur de CRA</b><span>Compte rendu d'activité</span></div>
+      <span class="save-witness" id="saveWitness" aria-live="polite" role="status" hidden>
+        <span class="sw-dot" aria-hidden="true"></span><span class="sw-text"></span>
+      </span>
     </div>
     <div class="top-actions">
       <button class="btn small ghost" id="openSettings" title="Personnaliser">
@@ -559,12 +636,14 @@
     </div>
   </div>
 
-  <div class="page">
+  <div class="page" role="main">
+    <!-- Filigrane « Provisoire » du PDF — overlay absolu, n'ajoute rien à la hauteur mesurée par appliquerFit() -->
+    <div class="prov-watermark" id="provWatermark" aria-hidden="true"><span>Provisoire</span></div>
     <div class="sheet" id="sheet">
 
       <div class="doc-head">
         <div class="lead">
-          <div class="doc-brand"><span class="mark-slot" id="markDoc"></span><span class="eyebrow">Compte rendu d'activité</span></div>
+          <div class="doc-brand"><span class="mark-slot" id="markDoc"></span><span class="eyebrow">Compte rendu d'activité</span><span class="prov-badge" id="provBadge">Provisoire</span></div>
           <input class="title-input" id="docTitle" placeholder="Titre du document" aria-label="Titre du document">
         </div>
         <div class="period">
@@ -652,7 +731,7 @@
         <!-- ===== Colonne droite : calendrier en grille ===== -->
         <div class="col col-right" id="calPanel">
           <div class="cal-mobile-head no-print">
-            <span class="cal-title">Calendrier</span>
+            <span class="cal-title" id="calMobileTitle" tabindex="-1">Calendrier</span>
             <button class="btn small primary" id="closeCal" type="button">Terminé</button>
           </div>
           <div class="cal-head no-print">
@@ -668,6 +747,14 @@
             <div class="grp">
               <button class="btn small" id="checkAll">Jours ouvrés</button>
               <button class="btn small ghost" id="clearAll">Tout décocher</button>
+            </div>
+            <div class="presets" id="presets" aria-label="Modèles d'activité">
+              <button class="preset-add" id="presetAdd" type="button" aria-label="Enregistrer l'activité saisie comme modèle" title="Enregistrer comme modèle">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                <span>Modèle</span>
+              </button>
+              <span class="preset-empty" id="presetEmpty">Enregistrez vos activités fréquentes en modèles réutilisables.</span>
+              <span class="preset-list" id="presetList"></span>
             </div>
             <p class="hint">Touchez la <b>moitié gauche (matin)</b> ou <b>droite (après-midi)</b>, ou l'<b>hexagone</b> en haut à droite pour la <b>journée complète</b>. Au PC, <b>clic-glissé</b> coche plusieurs jours. Demi-journée = <b>0,5 j</b>.</p>
           </div>
@@ -689,9 +776,9 @@
 
   <!-- ===== Fiche du jour (mobile) ===== -->
   <div class="overlay" id="dayOverlay"></div>
-  <aside class="day-sheet" id="daySheet" aria-hidden="true" aria-label="Renseigner le jour">
+  <aside class="day-sheet" id="daySheet" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="daySheetTitle">
     <div class="grab-zone" id="daySheetGrab" aria-hidden="true"><div class="grab"></div></div>
-    <div class="day-sheet-head"><span class="dt" id="daySheetTitle">Jour</span>
+    <div class="day-sheet-head"><span class="dt" id="daySheetTitle" tabindex="-1">Jour</span>
       <button class="btn small ghost iconly" id="daySheetClose" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
     <button class="day-full-btn" type="button" id="daySheetFull" aria-pressed="false">
@@ -699,8 +786,8 @@
       Journée complète
     </button>
     <div class="seg">
-      <button class="seg-btn" type="button" data-slot="am"><span class="dot"></span>Matin</button>
-      <button class="seg-btn" type="button" data-slot="pm"><span class="dot"></span>Après-midi</button>
+      <button class="seg-btn" type="button" data-slot="am" aria-pressed="false"><span class="dot" aria-hidden="true"></span>Matin</button>
+      <button class="seg-btn" type="button" data-slot="pm" aria-pressed="false"><span class="dot" aria-hidden="true"></span>Après-midi</button>
     </div>
     <textarea class="day-act-full" id="daySheetAct" placeholder="Activité réalisée…"></textarea>
     <div class="day-sheet-foot">
@@ -711,8 +798,8 @@
 
   <!-- ===== Tiroir de personnalisation ===== -->
   <div class="overlay" id="overlay"></div>
-  <aside class="drawer" id="drawer" aria-hidden="true" aria-label="Personnalisation">
-    <div class="drawer-head"><h2>Personnalisation</h2>
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="drawerTitle">
+    <div class="drawer-head"><h2 id="drawerTitle" tabindex="-1">Personnalisation</h2>
       <button class="btn small ghost iconly" id="closeSettings" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
     <div class="drawer-body">
@@ -733,11 +820,36 @@
       </div>
       <div class="dgroup"><h3>Affichage</h3>
         <div class="drow"><span class="lbl">Motif hexagone en fond</span>
-          <label class="switch"><input type="checkbox" id="motifToggle" checked><span class="track"></span><span class="thumb"></span></label>
+          <label class="switch"><input type="checkbox" id="motifToggle" checked aria-label="Motif hexagone en fond"><span class="track"></span><span class="thumb"></span></label>
         </div>
+        <div class="drow"><span class="lbl" id="provLbl">CRA provisoire (brouillon)</span>
+          <label class="switch"><input type="checkbox" id="provToggle" aria-labelledby="provLbl"><span class="track"></span><span class="thumb"></span></label>
+        </div>
+        <p class="dnote">Ajoute une mention « Provisoire » à l'écran et un filigrane sur le PDF, pour signaler une version non définitive.</p>
+      </div>
+      <div class="dgroup"><h3>Profils d'identité</h3>
+        <p class="dnote">Enregistrez société, client, destinataire, rôles, couleur, logo, motif et TJM comme profil réutilisable. Le calendrier et les signatures restent propres à chaque CRA.</p>
+        <div class="prof-add">
+          <input class="prof-name" id="profName" placeholder="Nom du profil — ex. Client A" aria-label="Nom du nouveau profil" maxlength="60">
+          <button class="btn small" id="profSave" type="button">Enregistrer</button>
+        </div>
+        <div class="prof-list" id="profList"></div>
+        <p class="prof-empty dnote" id="profEmpty">Aucun profil enregistré pour l'instant.</p>
       </div>
       <div class="dgroup"><h3>Mes données</h3>
         <p class="dnote">Vos informations, couleur, logo, TJM, calendrier et signatures sont enregistrés uniquement dans ce navigateur, sur cet appareil. Rien n'est envoyé en ligne.</p>
+        <div class="data-actions">
+          <button class="btn small" id="exportData" type="button">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+            Exporter (.json)
+          </button>
+          <label class="btn small ghost" id="importLabel">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+            Importer (.json)
+            <input type="file" id="importFile" accept="application/json,.json" hidden>
+          </label>
+        </div>
+        <p class="dnote">Sauvegarde complète (infos, calendrier, archive, modèles, signatures). Réimportable ici ou sur un autre appareil, entièrement hors-ligne.</p>
         <div style="margin-top:12px;"><button class="btn small danger" id="clearData" type="button">Effacer mes données enregistrées</button></div>
       </div>
     </div>
@@ -774,16 +886,98 @@
   var estDays=document.getElementById('estDays'), estCa=document.getElementById('estCa'), estNet=document.getElementById('estNet');
 
   /* ============================================================
+     TÉMOIN D'ÉTAT DE SAUVEGARDE (aria-live) — dérive de save()
+        États : cours (enregistrement…) / ok (enregistré) /
+        echec (quota) / indispo (localStorage absent). Le témoin
+        « ok » s'estompe seul ; « échec »/« indispo » persistent.
+  ============================================================ */
+  var witnessEl=document.getElementById('saveWitness');
+  var witnessDot=witnessEl?witnessEl.querySelector('.sw-dot'):null;
+  var witnessText=witnessEl?witnessEl.querySelector('.sw-text'):null;
+  var witnessTimer=null;
+  var LIB_STATUT={ cours:'Enregistrement…', ok:'Enregistré', echec:'Échec — pensez à exporter', indispo:'Sauvegarde locale indisponible — exportez' };
+  function setStatut(etat){
+    if(!witnessEl) return;
+    var txt=LIB_STATUT[etat]||''; if(!txt){ witnessEl.hidden=true; return; }
+    witnessEl.hidden=false;
+    witnessEl.classList.remove('is-cours','is-ok','is-warn');
+    witnessEl.classList.add(etat==='cours'?'is-cours':(etat==='ok'?'is-ok':'is-warn'));
+    witnessText.textContent=txt;
+    if(witnessTimer){ clearTimeout(witnessTimer); witnessTimer=null; }
+    if(etat==='ok'){ witnessTimer=setTimeout(function(){ if(!witnessEl.classList.contains('is-warn')){ witnessEl.hidden=true; } }, 2200); }
+  }
+
+  /* ============================================================
+     ANNONCES ACCESSIBLES (aria-live) — dérivent de l'état
+        Une seule région alimentée par recalculer() (total) et par
+        les actions groupées. Texte via textContent uniquement.
+  ============================================================ */
+  var liveEl=document.getElementById('liveRegion');
+  var liveTimer=null;
+  function annoncer(msg){
+    if(!liveEl) return;
+    // vider puis réécrire force certains lecteurs à re-annoncer un texte identique
+    liveEl.textContent='';
+    if(liveTimer) clearTimeout(liveTimer);
+    liveTimer=setTimeout(function(){ liveEl.textContent=msg; }, 40);
+  }
+
+  /* ============================================================
+     GESTION DU FOCUS DANS LES SURFACES MODALES (WCAG 2.4.3 / 2.4.11)
+        Fonction générique partagée par la fiche du jour, le tiroir et
+        le calendrier plein écran. À l'ouverture : mémorise le
+        déclencheur, déplace le focus dans le panneau, piège Tab.
+        À la fermeture : retire le piège et rend le focus.
+  ============================================================ */
+  var SEL_FOCUS='a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  function focusablesVisibles(panneau){
+    return Array.prototype.filter.call(panneau.querySelectorAll(SEL_FOCUS), function(el){
+      if(el.hidden) return false;
+      return !!(el.offsetWidth||el.offsetHeight||el.getClientRects().length);
+    });
+  }
+  function gererModale(panneau, declencheur, premier){
+    if(!panneau) return function(){};
+    var precedent=(declencheur&&declencheur.focus)?declencheur:document.activeElement;
+    // Focus initial : élément fourni, sinon 1er focusable, sinon le panneau lui-même.
+    var cible=premier||focusablesVisibles(panneau)[0]||panneau;
+    // Laisse l'ouverture (transition) se poser avant de déplacer le focus.
+    setTimeout(function(){ try{ cible.focus({preventScroll:true}); }catch(e){ try{ cible.focus(); }catch(_){} } }, 60);
+    function onKey(e){
+      if(e.key!=='Tab') return;
+      var f=focusablesVisibles(panneau); if(!f.length){ e.preventDefault(); return; }
+      var premierF=f[0], dernierF=f[f.length-1], actif=document.activeElement;
+      if(e.shiftKey){ if(actif===premierF||!panneau.contains(actif)){ e.preventDefault(); dernierF.focus(); } }
+      else { if(actif===dernierF||!panneau.contains(actif)){ e.preventDefault(); premierF.focus(); } }
+    }
+    panneau.addEventListener('keydown', onKey);
+    // Fonction de libération : retire le piège et rend le focus au déclencheur.
+    return function relacher(){
+      panneau.removeEventListener('keydown', onKey);
+      if(precedent&&precedent.focus){ try{ precedent.focus({preventScroll:true}); }catch(e){ try{ precedent.focus(); }catch(_){} } }
+    };
+  }
+
+  /* ============================================================
      PERSISTANCE LOCALE (protégée si localStorage indisponible)
   ============================================================ */
   var LS = (function(){ try{ var t='__cra__'; localStorage.setItem(t,'1'); localStorage.removeItem(t); return localStorage; }catch(e){ return null; } })();
   var STORE_KEY='cra_app_v3';
+  var PROFILES_KEY='cra_profiles_v1';   // clé séparée : profils d'identité réutilisables
   // Source de vérité du calendrier : state.days = { [numJour]: {am, pm, act} }
-  var state = { fields:{}, accent:'#E2A400', mark:'hex', logo:null, motif:true, tjm:'', charges:'', sig:{left:null,right:null}, month:null, year:null, days:{} };
+  // presets = modèles de libellés d'activité ; archive = { 'AAAA-MM': {days} } (jours du mois sérialisés)
+  var state = { fields:{}, accent:'#E2A400', mark:'hex', logo:null, motif:true, provisoire:false, tjm:'', charges:'', sig:{left:null,right:null}, month:null, year:null, days:{}, presets:[], archive:{} };
   var saveTimer=null;
-  function save(){ if(!LS) return; try{ LS.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){} }
-  function saveSoon(){ if(saveTimer) clearTimeout(saveTimer); saveTimer=setTimeout(save,300); }
+  // save() renvoie un booléen : true si setItem a réussi, false sinon (quota, LS indisponible).
+  function save(){
+    if(!LS){ setStatut('indispo'); return false; }
+    try{ LS.setItem(STORE_KEY, JSON.stringify(state)); setStatut('ok'); return true; }
+    catch(e){ setStatut('echec'); return false; }
+  }
+  function saveSoon(){ if(saveTimer) clearTimeout(saveTimer); setStatut('cours'); saveTimer=setTimeout(save,300); }
   function load(){ if(!LS) return null; try{ return JSON.parse(LS.getItem(STORE_KEY)||'null'); }catch(e){ return null; } }
+  function chargerProfils(){ if(!LS) return []; try{ var a=JSON.parse(LS.getItem(PROFILES_KEY)||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+  function enregistrerProfils(list){ if(!LS) return false; try{ LS.setItem(PROFILES_KEY, JSON.stringify(list)); return true; }catch(e){ return false; } }
 
   /* ============================================================
      SÉLECTEURS MOIS / ANNÉE
@@ -823,7 +1017,7 @@
     var e=etatJour(j);
     var cls='cell'+(we?' we':'')+(sel?' sel':'')+(estAuj?' today':'');
     var actEsc=(j.act||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    return '<div class="'+cls+'" data-d="'+d+'">'+
+    return '<div class="'+cls+'" data-d="'+d+'"'+(estAuj?' aria-current="date"':'')+'>'+
       '<button class="cell-tap" type="button" aria-label="Renseigner le '+d+'"></button>'+
       '<div class="cell-top"><span class="num">'+d+'</span>'+
         '<span class="day-tot">'+(demi?fmt(demi)+' j':'')+'</span>'+
@@ -894,11 +1088,14 @@
   /* ============================================================
      TOTAL + ESTIMATION + COMPTEUR
   ============================================================ */
+  // Total en jours dérivé de la seule source de vérité (state.days).
+  function totalJours(){ var demi=0; for(var d in state.days){ var j=state.days[d]; if(j.am) demi++; if(j.pm) demi++; } return demi*0.5; }
   function recalculer(){
-    var demi=0;
-    for(var d in state.days){ var j=state.days[d]; if(j.am) demi++; if(j.pm) demi++; }
-    var total=demi*0.5, txt=fmt(total);
-    if(totalNum.textContent!==txt){ totalNum.textContent=txt; totalNum.classList.remove('pulse'); void totalNum.offsetWidth; totalNum.classList.add('pulse'); }
+    var total=totalJours(), txt=fmt(total);
+    if(totalNum.textContent!==txt){
+      totalNum.textContent=txt; totalNum.classList.remove('pulse'); void totalNum.offsetWidth; totalNum.classList.add('pulse');
+      annoncer(txt+' '+(total>1?'jours cochés':'jour coché'));
+    }
     calCount.textContent=txt+' j';
     majEstimation(total);
   }
@@ -942,17 +1139,50 @@
       if(we){ var j=state.days[d]; if(j){ j.am=false; j.pm=false; nettoyerJour(d); } }
       else { var k=assurerJour(d); k.am=true; k.pm=true; }
     }
-    construireGrille(); saveSoon();
+    construireGrille(); saveSoon(); annoncer('Jours ouvrés cochés — '+fmt(totalJours())+' jours');
   }
   function toutDecocher(){
     for(var d in state.days){ state.days[d].am=false; state.days[d].pm=false; nettoyerJour(d); }
-    construireGrille(); saveSoon();
+    construireGrille(); saveSoon(); annoncer('Calendrier vidé');
   }
   function appliquerActivite(){
-    var v=defAct.value.trim(); if(!v){ defAct.focus(); return; }
-    for(var d in state.days){ var j=state.days[d]; if(j.am||j.pm) j.act=v; }
-    construireGrille(); saveSoon();
+    var v=defAct.value.trim(); if(!v){ defAct.focus(); annoncer('Saisissez une activité à appliquer'); return; }
+    var n=0;
+    for(var d in state.days){ var j=state.days[d]; if(j.am||j.pm){ j.act=v; n++; } }
+    construireGrille(); saveSoon(); annoncer(n?('Activité appliquée à '+n+' '+(n>1?'jours':'jour')):'Aucun jour coché où appliquer l’activité');
   }
+
+  /* ============================================================
+     MODÈLES D'ACTIVITÉ (presets) — dérivent de state.presets
+        Une puce remplit defAct ; « + » enregistre defAct comme modèle ;
+        la croix retire une puce. Aucun innerHTML avec texte utilisateur.
+  ============================================================ */
+  var presetListEl=document.getElementById('presetList'), presetEmptyEl=document.getElementById('presetEmpty');
+  function rendrePresets(){
+    if(!presetListEl) return;
+    presetListEl.textContent='';
+    var vide=!state.presets.length;
+    if(presetEmptyEl) presetEmptyEl.classList.toggle('hide', !vide);
+    state.presets.forEach(function(txt, i){
+      var chip=document.createElement('span'); chip.className='preset-chip';
+      var fill=document.createElement('button'); fill.type='button'; fill.className='preset-fill';
+      fill.textContent=txt; fill.title='Utiliser : '+txt;
+      fill.setAttribute('aria-label','Utiliser le modèle : '+txt);
+      fill.addEventListener('click', function(){ defAct.value=txt; defAct.focus(); annoncer('Modèle inséré : '+txt); });
+      var del=document.createElement('button'); del.type='button'; del.className='preset-del';
+      del.setAttribute('aria-label','Supprimer le modèle : '+txt);
+      del.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+      del.addEventListener('click', function(){ state.presets.splice(i,1); rendrePresets(); saveSoon(); annoncer('Modèle supprimé'); });
+      chip.appendChild(fill); chip.appendChild(del); presetListEl.appendChild(chip);
+    });
+  }
+  function ajouterPreset(){
+    var v=defAct.value.trim();
+    if(!v){ defAct.focus(); annoncer('Saisissez une activité avant de créer un modèle'); return; }
+    if(state.presets.indexOf(v)!==-1){ annoncer('Ce modèle existe déjà'); return; }
+    state.presets.push(v); rendrePresets(); saveSoon(); annoncer('Modèle enregistré');
+  }
+  document.getElementById('presetAdd').addEventListener('click', ajouterPreset);
 
   /* ============================================================
      INTERACTIONS GRILLE (délégation d'événements)
@@ -997,7 +1227,7 @@
       return;
     }
     var tap=e.target.closest('.cell-tap');                      // corps vide de la cellule → fiche du jour
-    if(tap){ ouvrirFiche(tap.closest('.cell').dataset.d); }
+    if(tap){ ouvrirFiche(tap.closest('.cell').dataset.d, tap); }
   });
   grid.addEventListener('input', function(e){
     var act=e.target.closest('.cell-act'); if(!act) return;
@@ -1021,16 +1251,23 @@
   }
   function majFiche(){
     var j=jour(jourCourant), pleine=j.am&&j.pm;
-    daySheet.querySelector('[data-slot="am"]').classList.toggle('on', j.am);
-    daySheet.querySelector('[data-slot="pm"]').classList.toggle('on', j.pm);
+    var segAm=daySheet.querySelector('[data-slot="am"]'), segPm=daySheet.querySelector('[data-slot="pm"]');
+    segAm.classList.toggle('on', j.am); segAm.setAttribute('aria-pressed', j.am);
+    segPm.classList.toggle('on', j.pm); segPm.setAttribute('aria-pressed', j.pm);
     daySheetFull.classList.toggle('on', pleine); daySheetFull.setAttribute('aria-pressed', pleine);
     if(document.activeElement!==daySheetAct) daySheetAct.value=j.act||'';
   }
-  function ouvrirFiche(d){
+  var relacherFiche=null;
+  function ouvrirFiche(d, declencheur){
     jourCourant=d; daySheetTitle.textContent=libelleJour(d); majFiche();
     daySheet.classList.add('open'); dayOverlay.classList.add('open'); daySheet.setAttribute('aria-hidden','false');
+    relacherFiche=gererModale(daySheet, declencheur||null, daySheetTitle);
   }
-  function fermerFiche(){ daySheet.classList.remove('open'); dayOverlay.classList.remove('open'); daySheet.setAttribute('aria-hidden','true'); jourCourant=null; }
+  function fermerFiche(){
+    if(!daySheet.classList.contains('open')) return;
+    daySheet.classList.remove('open'); dayOverlay.classList.remove('open'); daySheet.setAttribute('aria-hidden','true'); jourCourant=null;
+    if(relacherFiche){ relacherFiche(); relacherFiche=null; }
+  }
   daySheet.querySelectorAll('.seg-btn').forEach(function(b){
     b.addEventListener('click', function(){ if(jourCourant==null) return; var t=b.dataset.slot; definirCreneau(jourCourant, t, !estActif(jourCourant,t)); majFiche(); buzz(); });
   });
@@ -1054,23 +1291,70 @@
   /* ============================================================
      PERSONNALISATION (accent, icône, logo, motif)
   ============================================================ */
-  function luminance(hex){ var c=hex.replace('#',''); if(c.length===3)c=c.split('').map(function(x){return x+x;}).join(''); var r=parseInt(c.substr(0,2),16)/255,g=parseInt(c.substr(2,2),16)/255,b=parseInt(c.substr(4,2),16)/255; function f(v){return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4);} return 0.2126*f(r)+0.7152*f(g)+0.0722*f(b); }
+  // Composantes RVB [0..1] d'un hex (#rgb ou #rrggbb).
+  function rgbCanaux(hex){ var c=hex.replace('#',''); if(c.length===3)c=c.split('').map(function(x){return x+x;}).join(''); return [parseInt(c.substr(0,2),16)/255,parseInt(c.substr(2,2),16)/255,parseInt(c.substr(4,2),16)/255]; }
+  function luminance(hex){ var v=rgbCanaux(hex); function f(x){return x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4);} return 0.2126*f(v[0])+0.7152*f(v[1])+0.0722*f(v[2]); }
+  // Contraste WCAG entre deux luminances.
+  function contraste(l1,l2){ return (Math.max(l1,l2)+0.05)/(Math.min(l1,l2)+0.05); }
+  // Encre sur l'accent (WCAG 1.4.3/1.4.11) : on choisit noir chaud OU blanc selon
+  // le MEILLEUR contraste, mesuré sur toute la surface du dégradé (base + haut
+  // éclairci de 16 % comme --accent-top). Corrige le défaut du seuil de luminance
+  // qui posait du blanc illisible sur l'ambre par défaut (2,2:1 → 7,8:1).
+  function encreSurAccent(hex){
+    var v=rgbCanaux(hex);
+    var haut=[v[0]+(1-v[0])*0.16, v[1]+(1-v[1])*0.16, v[2]+(1-v[2])*0.16];  // ≈ --accent-top
+    function lum(c){ function f(x){return x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4);} return 0.2126*f(c[0])+0.7152*f(c[1])+0.0722*f(c[2]); }
+    var lBase=lum(v), lHaut=lum(haut);
+    var lFonce=luminance('#241a00'), lClair=1.0;
+    var minFonce=Math.min(contraste(lFonce,lBase),contraste(lFonce,lHaut));
+    var minClair=Math.min(contraste(lClair,lBase),contraste(lClair,lHaut));
+    return minFonce>=minClair?'#241a00':'#ffffff';
+  }
   function appliquerAccent(hex,persist){
+    hex=accentValide(hex);                       // n'accepte qu'un vrai code couleur (défaut sinon)
     state.accent=hex;
     document.documentElement.style.setProperty('--accent',hex);
-    document.documentElement.style.setProperty('--on-accent', luminance(hex)>0.55?'#241a00':'#ffffff');
+    document.documentElement.style.setProperty('--on-accent', encreSurAccent(hex));
     var p=document.getElementById('accentPicker'); if(p&&hex.length===7) p.value=hex;
     document.querySelectorAll('.swatch-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.c.toLowerCase()===hex.toLowerCase()); });
     if(persist!==false) saveSoon();
   }
+  // Un dataURL image est-il légitime ? N'accepte QUE data:image/<type>,… (types bitmap ou SVG).
+  // Barrière contre l'injection : un logo importé/restauré non conforme (ex. HTML piégé) est rejeté,
+  // jamais inséré. Rejette aussi tout ce qui n'est pas une chaîne.
+  var RE_IMG_DATAURL=/^data:image\/(png|jpe?g|gif|webp|svg\+xml|bmp|x-icon|vnd\.microsoft\.icon);/i;
+  function estImageDataUrl(v){ return typeof v==='string' && v.length<5e6 && RE_IMG_DATAURL.test(v); }
+  // Clé d'icône de marque valide (présente dans MARKS), sinon défaut 'hex'.
+  function markValide(id){ return (typeof id==='string' && Object.prototype.hasOwnProperty.call(MARKS,id))?id:'hex'; }
+  // Couleur d'accent : #rgb ou #rrggbb seulement. Toute autre valeur retombe sur le défaut.
+  var RE_HEX=/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+  function accentValide(v){ return (typeof v==='string' && RE_HEX.test(v))?v:'#E2A400'; }
+  // Signatures : objet {left,right} où chaque branche est un dataURL image valide ou null.
+  // Un canvas dessine puis affiche <img> depuis ces valeurs → filtrer bloque toute charge hostile.
+  function sigValide(s){
+    if(!s||typeof s!=='object'||Array.isArray(s)) return {left:null,right:null};
+    return { left:estImageDataUrl(s.left)?s.left:null, right:estImageDataUrl(s.right)?s.right:null };
+  }
   function rendreIcones(){
-    var html=state.logo?'<img src="'+state.logo+'" alt="">':MARKS[state.mark];
-    document.getElementById('markTop').innerHTML=html; document.getElementById('markDoc').innerHTML=html;
-    document.querySelectorAll('.mark-btn').forEach(function(b){ b.classList.toggle('active', !state.logo&&b.dataset.m===state.mark); });
+    // Logo utilisateur (dataURL, potentiellement non fiable) rejeté s'il n'est pas une image valide.
+    var logoOk=estImageDataUrl(state.logo);
+    if(!logoOk && state.logo){ state.logo=null; }              // neutralise une valeur hostile persistée/importée
+    var mark=markValide(state.mark);
+    // Rendu SANS innerHTML pour le logo : l'<img> est construit par l'API DOM, .src ne peut pas
+    // sortir de l'attribut (pas d'injection). innerHTML n'est utilisé que pour le SVG statique MARKS.
+    ['markTop','markDoc'].forEach(function(id){
+      var slot=document.getElementById(id); if(!slot) return;
+      slot.textContent='';
+      if(logoOk){ var im=document.createElement('img'); im.src=state.logo; im.alt=''; slot.appendChild(im); }
+      else { slot.innerHTML=MARKS[mark]; }                     // MARKS = constantes SVG figées, non altérables
+    });
+    document.querySelectorAll('.mark-btn').forEach(function(b){ b.classList.toggle('active', !logoOk&&b.dataset.m===mark); });
     var lp=document.getElementById('logoPreview');
-    if(state.logo){ lp.src=state.logo; lp.classList.add('show'); } else { lp.classList.remove('show'); lp.removeAttribute('src'); }
+    if(logoOk){ lp.src=state.logo; lp.classList.add('show'); } else { lp.classList.remove('show'); lp.removeAttribute('src'); }
   }
   function appliquerMotif(on){ state.motif=!!on; document.body.classList.toggle('no-motif',!on); document.getElementById('motifToggle').checked=!!on; }
+  // Mention « provisoire » : dérive body.provisoire (écran badge + filigrane PDF, même état).
+  function appliquerProvisoire(on){ state.provisoire=!!on; document.body.classList.toggle('provisoire',!!on); document.getElementById('provToggle').checked=!!on; }
   (function construireUIPerso(){
     var sw=document.getElementById('swatches');
     SWATCHES.forEach(function(c){ var b=document.createElement('button'); b.className='swatch-btn'; b.type='button'; b.dataset.c=c; b.style.background=c; b.setAttribute('aria-label','Couleur '+c); b.addEventListener('click',function(){ appliquerAccent(c); }); sw.appendChild(b); });
@@ -1081,15 +1365,40 @@
   document.getElementById('logoFile').addEventListener('change', function(e){ var f=e.target.files&&e.target.files[0]; if(!f) return; var r=new FileReader(); r.onload=function(ev){ state.logo=ev.target.result; rendreIcones(); saveSoon(); }; r.readAsDataURL(f); e.target.value=''; });
   document.getElementById('logoRemove').addEventListener('click', function(){ state.logo=null; rendreIcones(); saveSoon(); });
   document.getElementById('motifToggle').addEventListener('change', function(e){ appliquerMotif(e.target.checked); saveSoon(); });
+  document.getElementById('provToggle').addEventListener('change', function(e){ appliquerProvisoire(e.target.checked); saveSoon(); annoncer(e.target.checked?'CRA marqué provisoire':'Mention provisoire retirée'); });
 
   /* ============================================================
      TIROIR + CALENDRIER PLEIN ÉCRAN (mobile)
   ============================================================ */
   var drawer=document.getElementById('drawer'), overlay=document.getElementById('overlay'), calPanel=document.getElementById('calPanel');
-  function ouvrirTiroir(){ drawer.classList.add('open'); overlay.classList.add('open'); drawer.setAttribute('aria-hidden','false'); }
-  function fermerTiroir(){ drawer.classList.remove('open'); overlay.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); }
-  function ouvrirCal(){ calPanel.classList.add('open'); document.body.classList.add('cal-open'); }
-  function fermerCal(){ calPanel.classList.remove('open'); document.body.classList.remove('cal-open'); }
+  var relacherTiroir=null, relacherCal=null;
+  var drawerTitre=drawer.querySelector('.drawer-head h2');
+  var calTitreMobile=calPanel.querySelector('.cal-mobile-head .cal-title');
+  function ouvrirTiroir(){
+    drawer.classList.add('open'); overlay.classList.add('open'); drawer.setAttribute('aria-hidden','false');
+    relacherTiroir=gererModale(drawer, null, drawerTitre);
+  }
+  function fermerTiroir(){
+    if(!drawer.classList.contains('open')) return;
+    drawer.classList.remove('open'); overlay.classList.remove('open'); drawer.setAttribute('aria-hidden','true');
+    if(relacherTiroir){ relacherTiroir(); relacherTiroir=null; }
+  }
+  // Le calendrier plein écran n'est modal qu'en mode téléphone (≤699px) : sinon il est en flux.
+  function calEstModal(){ try{ return window.matchMedia('(max-width:699px)').matches; }catch(e){ return false; } }
+  function ouvrirCal(){
+    calPanel.classList.add('open'); document.body.classList.add('cal-open');
+    if(calEstModal()){
+      // N'est un dialogue modal QUE sur téléphone (panneau plein écran). En flux (tablette/bureau) : pas de rôle dialog.
+      calPanel.setAttribute('role','dialog'); calPanel.setAttribute('aria-modal','true'); calPanel.setAttribute('aria-labelledby','calMobileTitle');
+      relacherCal=gererModale(calPanel, null, calTitreMobile);
+    }
+  }
+  function fermerCal(){
+    if(!calPanel.classList.contains('open')) return;
+    calPanel.classList.remove('open'); document.body.classList.remove('cal-open');
+    calPanel.removeAttribute('role'); calPanel.removeAttribute('aria-modal'); calPanel.removeAttribute('aria-labelledby');
+    if(relacherCal){ relacherCal(); relacherCal=null; }
+  }
   document.getElementById('openSettings').addEventListener('click', ouvrirTiroir);
   document.getElementById('closeSettings').addEventListener('click', fermerTiroir);
   overlay.addEventListener('click', fermerTiroir);
@@ -1097,6 +1406,136 @@
   document.getElementById('closeCal').addEventListener('click', fermerCal);
   document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ fermerTiroir(); fermerCal(); fermerFiche(); } });
   document.getElementById('clearData').addEventListener('click', function(){ if(!confirm('Effacer toutes les données enregistrées sur cet appareil ?')) return; if(LS){ try{ LS.removeItem(STORE_KEY); }catch(e){} } location.reload(); });
+
+  /* ============================================================
+     EXPORT / IMPORT DU CRA EN .json (100 % hors-ligne)
+        Export : sérialise directement le state (même contrat que la
+        persistance) via Blob + URL.createObjectURL + <a download>.
+        Import : FileReader + JSON.parse (try/catch), validation
+        défensive, confirmation avant écrasement, ré-hydratation par
+        le même chemin que restaurer() (appliquerEtat). Fichier traité
+        comme non fiable : aucun innerHTML, passage par les setters.
+  ============================================================ */
+  function nomFichierExport(){
+    var base=(document.title||'CRA').replace(/[^\wÀ-ſ]+/g,'_').replace(/^_+|_+$/g,'')||'CRA';
+    return base+'.json';
+  }
+  function exporterJson(){
+    try{
+      var data=JSON.stringify(state, null, 2);
+      var blob=new Blob([data], {type:'application/json'});
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement('a'); a.href=url; a.download=nomFichierExport();
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+      annoncer('CRA exporté en fichier JSON');
+    }catch(e){ alert('Export impossible sur ce navigateur.'); }
+  }
+  // Vrai si l'objet importé ressemble à un état de CRA valide.
+  function etatPlausible(o){
+    if(!o||typeof o!=='object'||Array.isArray(o)) return false;
+    // Au moins une clé structurante attendue, et days doit être un objet si présent.
+    if(o.days!=null && (typeof o.days!=='object'||Array.isArray(o.days))) return false;
+    if(o.fields!=null && (typeof o.fields!=='object'||Array.isArray(o.fields))) return false;
+    return ('days' in o)||('fields' in o)||('sig' in o)||('accent' in o);
+  }
+  function importerJson(file){
+    var r=new FileReader();
+    r.onload=function(ev){
+      var obj=null;
+      try{ obj=JSON.parse(ev.target.result); }
+      catch(err){ alert('Fichier illisible : ce n’est pas un JSON valide.'); annoncer('Import échoué — fichier invalide'); return; }
+      if(!etatPlausible(obj)){ alert('Ce fichier ne correspond pas à un CRA exporté.'); annoncer('Import échoué — format non reconnu'); return; }
+      if(moisNonVide() || Object.keys(state.archive||{}).length){
+        if(!confirm('Importer remplacera votre CRA en cours (mois affiché, archive et modèles). Continuer ?')) return;
+      }
+      try{
+        appliquerEtat(obj);       // ré-hydratation défensive (mêmes setters que restaurer)
+        rafraichirTout();
+        var ok=save();            // persiste l'état importé et met à jour le témoin
+        annoncer(ok?'CRA importé et enregistré':'CRA importé (non enregistré localement)');
+      }catch(e){ alert('Import interrompu : données incompatibles.'); }
+    };
+    r.onerror=function(){ alert('Lecture du fichier impossible.'); };
+    r.readAsText(file);
+  }
+  document.getElementById('exportData').addEventListener('click', exporterJson);
+  document.getElementById('importFile').addEventListener('change', function(e){ var f=e.target.files&&e.target.files[0]; if(f) importerJson(f); e.target.value=''; });
+
+  /* ============================================================
+     PROFILS D'IDENTITÉ (clé localStorage séparée cra_profiles_v1)
+        Un profil = instantané des champs DÉJÀ paramétrables
+        (fields, accent, mark, logo, motif, tjm, charges). Jamais
+        days / sig / month / year. Appliquer = écrire dans state +
+        rappeler les setters existants. Aucun profil pré-livré.
+        Libellés via textContent uniquement.
+  ============================================================ */
+  var profils=chargerProfils();
+  var profListEl=document.getElementById('profList'), profEmptyEl=document.getElementById('profEmpty'), profNameEl=document.getElementById('profName');
+  function instantaneProfil(){
+    return {
+      fields:JSON.parse(JSON.stringify(state.fields||{})),
+      accent:state.accent, mark:state.mark, logo:state.logo,
+      motif:state.motif, tjm:state.tjm, charges:state.charges
+    };
+  }
+  function appliquerProfil(p){
+    if(!p) return;
+    var d=p.data||{};
+    // Champs texte (hors calendrier / signatures) : on fusionne sans toucher days/sig.
+    state.fields=Object.assign({}, state.fields, d.fields||{});
+    document.querySelectorAll('[data-k]').forEach(function(el){
+      if(el.tagName==='INPUT'&&el.type!=='file'&&el.type!=='color'&&el.type!=='checkbox'){
+        if(state.fields[el.dataset.k]!=null) el.value=state.fields[el.dataset.k];
+      }
+    });
+    if(d.fields&&d.fields.docTitle!=null) docTitleEl.value=d.fields.docTitle;
+    if(d.fields&&d.fields.comment!=null) commentEl.innerText=d.fields.comment;
+    // Icône/logo issus d'un profil (clé localStorage séparée, potentiellement falsifiée) : filtrés.
+    state.mark=markValide(d.mark); state.logo=estImageDataUrl(d.logo)?d.logo:null;
+    state.tjm=(d.tjm!=null)?d.tjm:''; state.charges=(d.charges!=null)?d.charges:'';
+    tjmInput.value=state.tjm; chargesInput.value=state.charges;
+    appliquerMotif(d.motif!==false);
+    appliquerAccent(d.accent||'#E2A400', false);
+    rendreIcones(); majNoTitle(); majNoComment();
+    recalculer(); syncNomFichier(); rafraichirPrint(); saveSoon();
+    annoncer('Profil « '+(p.name||'')+' » appliqué');
+  }
+  function rendreProfils(){
+    if(!profListEl) return;
+    profListEl.textContent='';
+    if(profEmptyEl) profEmptyEl.classList.toggle('hide', profils.length>0);
+    profils.forEach(function(p, i){
+      var item=document.createElement('div'); item.className='prof-item';
+      var name=document.createElement('span'); name.className='pi-name'; name.textContent=p.name; name.title=p.name;
+      var acts=document.createElement('div'); acts.className='pi-actions';
+      var apply=document.createElement('button'); apply.type='button'; apply.className='btn small'; apply.textContent='Appliquer';
+      apply.setAttribute('aria-label','Appliquer le profil '+p.name);
+      apply.addEventListener('click', function(){ appliquerProfil(p); });
+      var del=document.createElement('button'); del.type='button'; del.className='btn small ghost danger'; del.textContent='Supprimer';
+      del.setAttribute('aria-label','Supprimer le profil '+p.name);
+      del.addEventListener('click', function(){
+        if(!confirm('Supprimer le profil « '+p.name+' » ?')) return;
+        profils.splice(i,1); enregistrerProfils(profils); rendreProfils(); annoncer('Profil supprimé');
+      });
+      acts.appendChild(apply); acts.appendChild(del);
+      item.appendChild(name); item.appendChild(acts); profListEl.appendChild(item);
+    });
+  }
+  function enregistrerProfilCourant(){
+    var nom=(profNameEl.value||'').trim();
+    if(!nom){ profNameEl.focus(); annoncer('Nommez le profil avant d’enregistrer'); return; }
+    var existant=-1;
+    for(var i=0;i<profils.length;i++){ if(profils[i].name.toLowerCase()===nom.toLowerCase()){ existant=i; break; } }
+    if(existant!==-1 && !confirm('Un profil « '+nom+' » existe déjà. Le remplacer ?')) return;
+    var entree={ name:nom, data:instantaneProfil() };
+    if(existant!==-1) profils[existant]=entree; else profils.push(entree);
+    var ok=enregistrerProfils(profils); rendreProfils(); profNameEl.value='';
+    annoncer(ok?('Profil « '+nom+' » enregistré'):'Enregistrement du profil impossible (stockage local)');
+  }
+  document.getElementById('profSave').addEventListener('click', enregistrerProfilCourant);
+  profNameEl.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); enregistrerProfilCourant(); } });
+  rendreProfils();
 
   /* ============================================================
      SIGNATURES (dessin + import + glisser-déposer)
@@ -1111,7 +1550,7 @@
     function fin(){ if(!dessine) return; dessine=false; persister(); }
     canvas.addEventListener('pointerdown',debut); canvas.addEventListener('pointermove',bouge); window.addEventListener('pointerup',fin);
     function persister(){ try{ state.sig[key]=canvas.toDataURL('image/png'); saveSoon(); }catch(e){} }
-    function effacer(){ ctx.clearRect(0,0,canvas.width,canvas.height); zone.classList.remove('has-ink'); state.sig[key]=null; saveSoon(); }
+    function effacer(silencieux){ ctx.clearRect(0,0,canvas.width,canvas.height); zone.classList.remove('has-ink'); state.sig[key]=null; if(silencieux!==true) saveSoon(); }
     function dessinerImage(src,persistIt){ var img=new Image(); img.onload=function(){ ctx.clearRect(0,0,canvas.width,canvas.height); var s=Math.min(canvas.width/img.width,canvas.height/img.height); var w=img.width*s,h=img.height*s; ctx.drawImage(img,(canvas.width-w)/2,(canvas.height-h)/2,w,h); zone.classList.add('has-ink'); if(persistIt) persister(); }; img.src=src; }
     var card=zone.closest('.sign-card');
     card.querySelector('.sig-file').addEventListener('change', function(e){ var f=e.target.files&&e.target.files[0]; if(!f) return; var r=new FileReader(); r.onload=function(ev){ dessinerImage(ev.target.result,true); }; r.readAsDataURL(f); e.target.value=''; });
@@ -1119,7 +1558,7 @@
     ['dragenter','dragover'].forEach(function(ev){ zone.addEventListener(ev,function(e){ e.preventDefault(); zone.classList.add('dragover'); }); });
     ['dragleave','drop'].forEach(function(ev){ zone.addEventListener(ev,function(e){ e.preventDefault(); zone.classList.remove('dragover'); }); });
     zone.addEventListener('drop', function(e){ var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]; if(f&&/^image\//.test(f.type)){ var r=new FileReader(); r.onload=function(ev){ dessinerImage(ev.target.result,true); }; r.readAsDataURL(f); } });
-    return { restore:function(src){ if(src) dessinerImage(src,false); } };
+    return { restore:function(src){ if(src) dessinerImage(src,false); }, effacer:effacer };
   }
   var pads={}; document.querySelectorAll('.sign-zone').forEach(function(z){ pads[z.dataset.key]=initSignPad(z); });
 
@@ -1185,9 +1624,25 @@
         Changer de mois/année réinitialise le calendrier (un CRA
         par mois) et reconstruit la grille depuis l'état vide.
   ============================================================ */
+  // Clé d'archive d'une période : 'AAAA-MM' (mois sur 2 chiffres).
+  function cleArchive(y,m){ return y+'-'+(m<9?'0'+(m+1):(m+1)); }
+  // Le mois courant contient-il au moins une demi-journée cochée ?
+  function moisNonVide(){ for(var d in state.days){ var j=state.days[d]; if(j.am||j.pm) return true; } return false; }
+  // Sérialise le mois affiché dans l'archive (sans muter la source vivante) s'il a du contenu.
+  function archiverMoisCourant(){
+    if(state.month==null||state.year==null) return;
+    var k=cleArchive(state.year, state.month);
+    if(moisNonVide()){ state.archive[k]={ days:JSON.parse(JSON.stringify(state.days)) }; }
+    else if(state.archive[k]){ delete state.archive[k]; }   // mois vidé → on nettoie l'entrée
+  }
   function changerPeriode(){
-    state.days={}; state.month=parseInt(monthSel.value,10); state.year=parseInt(yearSel.value,10);
+    archiverMoisCourant();                                  // ne détruit plus le mois précédent
+    var m=parseInt(monthSel.value,10), y=parseInt(yearSel.value,10);
+    var k=cleArchive(y,m), ar=state.archive[k];
+    state.days=(ar&&ar.days)?JSON.parse(JSON.stringify(ar.days)):{};   // restaure depuis l'archive si présente
+    state.month=m; state.year=y;
     construireGrille(); construireTableauPdf(); syncNomFichier(); syncTitreCal(); saveSoon();
+    annoncer(MOIS[m]+' '+y+(ar&&ar.days?' — mois restauré ('+fmt(totalJours())+' j)':' — nouveau mois'));
   }
   monthSel.addEventListener('change', changerPeriode);
   yearSel.addEventListener('change', changerPeriode);
@@ -1198,31 +1653,60 @@
   defAct.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); appliquerActivite(); } });
 
   /* ============================================================
-     RESTAURATION (reprise du brouillon enregistré localement)
+     RÉ-HYDRATATION DE L'ÉTAT (chemin partagé restauration / import)
+        Un seul point d'entrée pour reconstruire l'UI à partir d'un
+        objet state (brouillon local OU fichier .json importé). Toute
+        clé absente reçoit un défaut sensé → rétrocompatible avec les
+        anciens brouillons cra_app_v3 (sans presets/archive).
   ============================================================ */
+  function appliquerEtat(s){
+    s=s||{};
+    // Champs texte : consommés uniquement via .value / .innerText (jamais innerHTML) → sûrs tels quels.
+    state.fields=(s.fields&&typeof s.fields==='object'&&!Array.isArray(s.fields))?s.fields:{};
+    // Icône/logo/signatures potentiellement hostiles (fichier importé, localStorage falsifié) : filtrés à l'entrée.
+    state.mark=markValide(s.mark);
+    state.logo=estImageDataUrl(s.logo)?s.logo:null;
+    state.motif=(s.motif!==false);
+    state.tjm=s.tjm||''; state.charges=s.charges||'';
+    state.sig=sigValide(s.sig); state.days=s.days||{};
+    state.presets=Array.isArray(s.presets)?s.presets.slice():[];
+    state.archive=(s.archive&&typeof s.archive==='object')?s.archive:{};
+    if(s.month!=null){ monthSel.value=s.month; state.month=parseInt(s.month,10); } else { state.month=parseInt(monthSel.value,10); }
+    if(s.year!=null){ yearSel.value=s.year; state.year=parseInt(s.year,10); } else { state.year=parseInt(yearSel.value,10); }
+    document.querySelectorAll('[data-k]').forEach(function(el){
+      if(el.tagName==='INPUT'&&el.type!=='file'&&el.type!=='color'&&el.type!=='checkbox'){
+        el.value=(state.fields[el.dataset.k]!=null)?state.fields[el.dataset.k]:'';
+      }
+    });
+    tjmInput.value=state.tjm; chargesInput.value=state.charges;
+    docTitleEl.value=(state.fields.docTitle!=null)?state.fields.docTitle:'';
+    commentEl.innerText=(state.fields.comment!=null)?state.fields.comment:'';
+    appliquerAccent(s.accent||'#E2A400', false); appliquerMotif(state.motif); appliquerProvisoire(s.provisoire===true); rendreIcones();
+    // Signatures : on repart d'un canvas propre puis on restaure celles présentes.
+    // effacer() remet state.sig[key]=null ; on capture donc les sources AVANT d'effacer,
+    // sinon restore() ne recevrait plus rien (le canvas resterait vide après import/restauration).
+    var sigL=state.sig.left, sigR=state.sig.right;
+    pads.left.effacer(true); pads.right.effacer(true);
+    if(sigL) pads.left.restore(sigL);
+    if(sigR) pads.right.restore(sigR);
+    state.sig.left=sigL; state.sig.right=sigR;   // restore() ne réécrit pas state.sig ; on rétablit la source de vérité
+    rendrePresets();
+  }
+  // Reconstruit toutes les vues dérivées après une ré-hydratation complète.
+  function rafraichirTout(){
+    construireGrille(); construireTableauPdf(); recalculer(); rafraichirPrint();
+    syncNomFichier(); syncTitreCal();
+  }
+
   (function restaurer(){
     construireSemaine();                       // en-têtes Lun → Dim
     var s=load();
-    if(s){
-      state.fields=s.fields||{}; state.mark=s.mark||'hex'; state.logo=s.logo||null; state.motif=(s.motif!==false);
-      state.tjm=s.tjm||''; state.charges=s.charges||''; state.sig=s.sig||{left:null,right:null}; state.days=s.days||{};
-      if(s.month!=null){ monthSel.value=s.month; state.month=s.month; }
-      if(s.year!=null){ yearSel.value=s.year; state.year=s.year; }
-      document.querySelectorAll('[data-k]').forEach(function(el){
-        if(el.tagName==='INPUT'&&el.type!=='file'&&el.type!=='color'&&el.type!=='checkbox'){
-          if(state.fields[el.dataset.k]!=null) el.value=state.fields[el.dataset.k];
-        }
-      });
-      tjmInput.value=state.tjm; chargesInput.value=state.charges;
-      if(state.fields.docTitle!=null) docTitleEl.value=state.fields.docTitle;
-      if(state.fields.comment!=null) commentEl.innerText=state.fields.comment;
-      appliquerAccent(s.accent||'#E2A400', false); appliquerMotif(state.motif); rendreIcones();
-      if(state.sig.left) pads.left.restore(state.sig.left);
-      if(state.sig.right) pads.right.restore(state.sig.right);
-    } else {
+    if(s){ appliquerEtat(s); }
+    else {
       state.month=parseInt(monthSel.value,10); state.year=parseInt(yearSel.value,10);
-      appliquerAccent('#E2A400', false); appliquerMotif(true); rendreIcones();
+      appliquerAccent('#E2A400', false); appliquerMotif(true); appliquerProvisoire(false); rendreIcones(); rendrePresets();
     }
+    if(!LS){ setStatut('indispo'); }           // témoin persistant si stockage local absent
   })();
 
   /* ============================================================
