@@ -1,5 +1,7 @@
 # Fichiers de session / prévisualisation Claude Code (non destinés au site)
 .claude/
+.mcp.json
+.playwright-mcp/
 
 # Divers
 .DS_Store

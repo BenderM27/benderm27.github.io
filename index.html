@@ -3,6 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- Politique de sécurité du contenu (défense en profondeur). connect-src 'none' verrouille
+     techniquement la promesse de confidentialité : aucune sortie réseau (fetch/XHR/beacon/WS)
+     n'est possible. Le HTML/CSS/JS vit en un seul fichier (inline), d'où 'unsafe-inline' ;
+     img-src autorise les dataURL (logo, signatures, favicon). Aucune ressource externe. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'">
 <title>CRA</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 30'><path d='M14 1.5 26 8.5v13L14 28.5 2 21.5v-13z' fill='%23FFF6D6' stroke='%23E2A400' stroke-width='2'/><path d='M14 8.5 20 12v6.5L14 22l-6-3.5V12z' fill='%23E2A400'/></svg>">
 <style>
@@ -31,6 +36,12 @@
     --shadow-soft:0 1px 2px rgba(16,18,24,.05);
     --shadow-sheet:0 1px 0 rgba(16,18,24,.02), 0 2px 8px rgba(16,18,24,.045), 0 24px 60px -26px rgba(16,18,24,.22);
     --shadow-pop:0 12px 44px -8px rgba(16,18,24,.32);
+
+    /* Halo de focus clavier (WCAG 2.2 SC 1.4.11) : l'anneau d'accent seul (ambre par
+       défaut) n'atteint que ~2,2:1 sur fond clair. Ce halo sombre translucide, posé en
+       box-shadow SOUS l'outline accent, garantit un indicateur ≥3:1 quel que soit
+       l'accent personnalisé, sans altérer la teinte de marque. */
+    --focus-halo:0 0 0 4.5px rgba(16,18,24,.55);
 
     --font:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --ease:cubic-bezier(.22,.61,.27,1);
@@ -69,7 +80,7 @@
   .btn svg{ flex:0 0 auto; }
   .btn:hover{ border-color:#B7BEC7; box-shadow:var(--shadow-soft); }
   .btn:active{ transform:translateY(1px); }
-  .btn:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; }
+  .btn:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; box-shadow:var(--focus-halo); }
   .btn.primary{ color:var(--on-accent); border-color:transparent; background:linear-gradient(180deg, var(--accent-top), var(--accent)); box-shadow:0 1px 2px rgba(20,18,8,.22), inset 0 1px 0 rgba(255,255,255,.35); }
   .btn.primary:hover{ filter:brightness(1.04); box-shadow:0 7px 18px -5px color-mix(in srgb, var(--accent) 58%, transparent); }
   .btn.ghost{ background:transparent; }
@@ -88,6 +99,19 @@
   .brand-text span{ font-size:10.5px; color:var(--muted); letter-spacing:.07em; text-transform:uppercase; white-space:nowrap; }
   .top-actions{ display:flex; align-items:center; gap:8px; }
 
+  /* Témoin d'état de sauvegarde — reflète le résultat de save() (dérivé, ne stocke rien) */
+  .save-witness{ display:inline-flex; align-items:center; gap:6px; padding:4px 9px; border-radius:99px; background:var(--paper-2); border:1px solid var(--line-2); font-size:11px; font-weight:600; color:var(--muted); white-space:nowrap; max-width:min(46vw,220px); overflow:hidden; }
+  .save-witness[hidden]{ display:none; }
+  .save-witness .sw-dot{ flex:0 0 auto; width:7px; height:7px; border-radius:50%; background:var(--faint); transition:background .16s var(--ease); }
+  .save-witness .sw-text{ overflow:hidden; text-overflow:ellipsis; }
+  .save-witness.is-cours .sw-dot{ background:var(--accent); animation:sw-blink 1s var(--ease) infinite; }
+  .save-witness.is-ok .sw-dot{ background:#15A66B; }
+  .save-witness.is-ok{ color:var(--muted); }
+  .save-witness.is-warn{ color:#B23A1E; border-color:color-mix(in srgb,#C0392B 26%,var(--line-2)); background:#FFF6F4; }
+  .save-witness.is-warn .sw-dot{ background:#C0392B; }
+  @keyframes sw-blink{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
+  @media (prefers-reduced-motion:reduce){ .save-witness.is-cours .sw-dot{ animation:none; } }
+
   /* ============================================================
      4. STRUCTURE GÉNÉRALE
   ============================================================ */
@@ -99,8 +123,15 @@
   .doc-brand{ display:flex; align-items:center; gap:9px; margin:0 0 9px; }
   .doc-brand .mark-slot{ width:22px; height:24px; }
   .eyebrow{ font-size:10.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--accent-deep); font-weight:700; }
-  .title-input{ font-family:var(--font); font-weight:730; letter-spacing:-.03em; font-size:clamp(21px,3vw,29px); color:var(--ink); line-height:1.08; border:none; outline:none; background:transparent; padding:0; width:100%; }
+  /* Badge « Provisoire » à l'écran — piloté par body.provisoire, texte + forme (pas couleur seule) */
+  .prov-badge{ display:none; align-items:center; gap:5px; font-size:9.5px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; color:#B23A1E; background:#FFF1EC; border:1px solid color-mix(in srgb,#C0392B 32%,#fff); border-radius:99px; padding:2px 9px; white-space:nowrap; }
+  .prov-badge::before{ content:""; width:6px; height:6px; border-radius:50%; background:#C0392B; flex:0 0 auto; }
+  body.provisoire .prov-badge{ display:inline-flex; }
+  /* Filigrane « Provisoire » — masqué à l'écran, révélé à l'impression via body.provisoire */
+  .prov-watermark{ display:none; }
+  .title-input{ font-family:var(--font); font-weight:730; letter-spacing:-.03em; font-size:clamp(21px,3vw,29px); color:var(--ink); line-height:1.08; border:none; outline:none; background:transparent; padding:0; width:100%; border-radius:6px; }
   .title-input::placeholder{ color:var(--faint); }
+  .title-input:focus-visible{ outline:2.5px solid var(--accent); outline-offset:3px; }
   .period{ display:flex; align-items:center; gap:8px; padding-bottom:3px; }
   select.field{ font-family:var(--font); font-weight:650; font-size:15px; color:var(--ink); appearance:none; -webkit-appearance:none; border:1px solid var(--line-3); background:#fff; border-radius:11px; padding:9px 32px 9px 13px; cursor:pointer; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' fill='none' stroke='%23697079' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>"); background-repeat:no-repeat; background-position:right 11px center; transition:border-color .16s var(--ease), box-shadow .16s var(--ease); }
   select.field:hover{ border-color:#B7BEC7; }
@@ -109,16 +140,41 @@
   .workspace{ margin-top:16px; display:flex; flex-direction:column; gap:18px; }
   .col{ min-width:0; }
 
+  /* Disposition interne du contenu pleine largeur.
+     Défaut (mobile) : une seule colonne, empilée. Sur grand écran, deux colonnes
+     internes équilibrées (infos + estimation | commentaire + signatures) — évite
+     la colonne étroite et vide. Les paliers larges sont gérés en section 15. */
+  .lay-grid{ display:flex; flex-direction:column; gap:22px; }
+  .lay-a, .lay-b{ display:flex; flex-direction:column; gap:20px; min-width:0; }
+
   /* ============================================================
-     5. DÉCLENCHEUR CALENDRIER (mobile) + EN-TÊTES
+     5. CARTE DE SYNTHÈSE / DÉCLENCHEUR DE LA POP-UP CALENDRIER
+        Action principale du contenu : ouvre le calendrier en modale.
+        Visible sur TOUS les viewports (le calendrier n'est plus une
+        colonne permanente). Affiche le nombre de jours cochés (#synthDays,
+        dérivé de recalculer()). En-tête de la modale : .cal-modal-head.
   ============================================================ */
-  .cal-trigger{ display:none; width:100%; justify-content:space-between; padding:14px 16px; font-size:15px; border-radius:14px; }
-  .cal-trigger .cal-count{ font-weight:750; color:var(--accent-deep); background:var(--accent-fill); border:1px solid var(--accent-edge); padding:3px 10px; border-radius:99px; font-size:13px; }
-  .cal-trigger .lhs{ display:inline-flex; align-items:center; gap:9px; }
-  .cal-mobile-head{ display:none; }
-  .cal-head{ display:flex; align-items:center; gap:9px; margin-bottom:12px; }
-  .cal-head .cal-title{ font-size:15px; font-weight:700; letter-spacing:-.01em; }
-  .cal-head .cal-ic{ color:var(--accent); display:inline-flex; }
+  .cal-trigger{ display:flex; width:100%; align-items:center; gap:14px; text-align:left; padding:15px 17px; margin:0 0 4px; border:1px solid var(--accent-edge); border-radius:var(--radius-md); cursor:pointer; font-family:var(--font); background:linear-gradient(180deg, var(--accent-fill-2), color-mix(in srgb,var(--accent) 4%, #fff)); box-shadow:var(--shadow-soft); transition:transform .12s var(--ease), box-shadow .16s var(--ease), border-color .16s var(--ease); }
+  .cal-trigger:hover{ border-color:var(--accent); box-shadow:0 6px 18px -8px color-mix(in srgb,var(--accent) 55%, transparent); }
+  .cal-trigger:active{ transform:translateY(1px); }
+  .cal-trigger:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; box-shadow:var(--focus-halo); }
+  .cal-trigger .ct-ic{ flex:0 0 auto; width:42px; height:42px; display:grid; place-items:center; border-radius:11px; color:var(--on-accent); background:linear-gradient(180deg,var(--accent-top),var(--accent)); box-shadow:0 1px 2px rgba(20,18,8,.25), inset 0 1px 0 rgba(255,255,255,.35); }
+  .cal-trigger .ct-text{ display:flex; flex-direction:column; gap:2px; min-width:0; flex:1 1 auto; }
+  .cal-trigger .ct-title{ font-size:15px; font-weight:700; letter-spacing:-.01em; color:var(--ink); }
+  .cal-trigger .ct-sub{ font-size:12.5px; color:var(--muted); }
+  .cal-trigger .ct-sub .ct-count{ color:var(--accent-deep); font-weight:750; font-variant-numeric:tabular-nums; }
+  /* État vide : on invite au clic sans masquer le compteur (0 j) */
+  .cal-trigger .ct-sub[data-empty="1"]{ font-size:0; }
+  .cal-trigger .ct-sub[data-empty="1"] .ct-count{ font-size:12.5px; }
+  .cal-trigger .ct-sub[data-empty="1"]::after{ content:" — touchez pour commencer"; font-size:12.5px; color:var(--muted); }
+  .cal-trigger .ct-go{ flex:0 0 auto; color:var(--accent-deep); opacity:.7; display:inline-flex; transition:transform .16s var(--ease), opacity .16s var(--ease); }
+  .cal-trigger:hover .ct-go{ transform:translateX(2px); opacity:1; }
+
+  /* En-tête de la pop-up calendrier (universel) : icône + titre du mois + « Terminé » */
+  .cal-modal-head{ display:flex; align-items:center; gap:10px; padding:16px 4px 14px; border-bottom:1px solid var(--line); margin-bottom:14px; flex:0 0 auto; }
+  .cal-modal-head .cal-ic{ color:var(--accent); display:inline-flex; flex:0 0 auto; }
+  .cal-modal-head .cal-title{ font-size:16px; font-weight:750; letter-spacing:-.01em; flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cal-modal-head .btn{ flex:0 0 auto; }
 
   /* ============================================================
      6. GRILLE D'INFORMATIONS
@@ -140,8 +196,27 @@
   .def-act::placeholder{ color:var(--faint); }
   .def-act:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-ring); }
   .aids .sep{ width:1px; align-self:stretch; min-height:22px; background:var(--line-2); margin:0 2px; }
-  .hint{ flex-basis:100%; font-size:11.5px; color:var(--faint); margin:2px 0 0; line-height:1.5; }
-  .hint b{ color:var(--muted); font-weight:600; }
+  .hint{ flex-basis:100%; font-size:11.5px; color:var(--muted); margin:2px 0 0; line-height:1.5; }
+  .hint b{ color:var(--ink-soft); font-weight:600; }
+
+  /* Modèles d'activité (presets) — dérivent de state.presets, jamais dupliqués */
+  .presets{ flex-basis:100%; display:flex; flex-wrap:wrap; align-items:center; gap:7px; min-width:0; }
+  .preset-add{ display:inline-flex; align-items:center; gap:5px; flex:0 0 auto; font-family:var(--font); font-size:12px; font-weight:600; color:var(--muted); background:#fff; border:1px dashed var(--line-3); border-radius:99px; padding:5px 11px; cursor:pointer; transition:border-color .16s var(--ease), color .16s var(--ease), background .16s var(--ease); }
+  .preset-add:hover{ border-color:var(--accent-edge); color:var(--accent-deep); background:var(--accent-fill-2); }
+  .preset-add:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; }
+  .preset-add svg{ flex:0 0 auto; }
+  .preset-empty{ font-size:11.5px; color:var(--muted); flex:1 1 auto; min-width:0; }
+  .preset-empty.hide{ display:none; }
+  .preset-list{ display:contents; }
+  .preset-chip{ display:inline-flex; align-items:center; gap:2px; flex:0 1 auto; max-width:100%; min-width:0; background:var(--accent-fill-2); border:1px solid var(--accent-edge); border-radius:99px; padding:0 3px 0 0; overflow:hidden; }
+  .preset-fill{ font-family:var(--font); font-size:12px; font-weight:600; color:var(--accent-deep); background:transparent; border:none; padding:5px 3px 5px 11px; cursor:pointer; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  .preset-fill:hover{ text-decoration:underline; }
+  .preset-fill:focus-visible{ outline:2.5px solid var(--accent); outline-offset:1px; border-radius:99px; }
+  .preset-del{ flex:0 0 auto; width:20px; height:20px; display:inline-grid; place-items:center; border:none; background:transparent; color:var(--accent-deep); opacity:.6; border-radius:50%; cursor:pointer; transition:opacity .14s var(--ease), background .14s var(--ease); }
+  .preset-del:hover{ opacity:1; background:color-mix(in srgb, var(--accent) 18%, #fff); }
+  .preset-del:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; opacity:1; }
+  .preset-del svg{ width:11px; height:11px; }
+  @media screen and (max-width:699px){ .preset-fill{ font-size:15px; padding-top:7px; padding-bottom:7px; } .preset-add{ font-size:13px; padding:7px 12px; } .preset-del{ width:26px; height:26px; } }
 
   /* ============================================================
      8. CALENDRIER — PIÈCE MAÎTRESSE (vue écran, en grille)
@@ -181,7 +256,9 @@
   .slot.on{ background:linear-gradient(180deg, color-mix(in srgb,var(--accent) 26%,#fff), var(--accent-fill)); }
   .slot.on::after{ color:var(--accent-deep); opacity:.9; }
   .slot.on:hover{ background:var(--accent-fill); }
-  .slot:focus-visible{ box-shadow:inset 0 0 0 2.5px var(--accent); }
+  /* Anneau de focus du créneau : accent + liseré sombre intérieur (WCAG 1.4.11) pour rester
+     ≥3:1 même quand l'accent clair est peu contrasté. Inset car .cell-slots rogne le débordement. */
+  .slot:focus-visible{ box-shadow:inset 0 0 0 2.5px var(--accent), inset 0 0 0 4px rgba(16,18,24,.5); }
   .cell.sel .cell-slots{ border-color:var(--accent-edge); }
 
   /* Pastille « journée complète » — hexagone de marque, tri-état :
@@ -204,7 +281,7 @@
   .cell-full[data-state="full"] .cf-hex::before{ background:linear-gradient(180deg, var(--accent-top), var(--accent)); }
   .cell-full[data-state="full"] .cf-hex::after{ opacity:1; }
   /* Anneau de focus posé sur le bouton (NON rogné), pas sur l'hexagone à clip-path */
-  .cell-full:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; border-radius:6px; }
+  .cell-full:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; border-radius:6px; box-shadow:var(--focus-halo); }
   .cell-full[data-state="empty"]:focus-visible{ opacity:1; }   /* le focus clavier reste visible même si atténué */
   .cell-full:active{ transform:scale(.88); }
   /* Atténuation discrète réservée à la souris fine (pas le tactile/hybride), et jamais au focus */
@@ -224,6 +301,27 @@
      créneaux (z2) et la pastille (z2), donc elle ne capte que les taps sur le corps vide
      de la cellule (numéro, marges), pas ceux destinés aux contrôles directs. */
   .cell-tap{ display:none; position:absolute; inset:0; z-index:1; border:none; background:transparent; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+
+  /* ============================================================
+     8b. POP-UP CALENDRIER (modale universelle)
+        Le calendrier n'est plus une colonne permanente : il vit dans
+        une modale ouverte par la carte de synthèse (.cal-trigger), à
+        TOUS les viewports. Base = panneau plein écran glissant (mobile) ;
+        le palier bureau (section 15) le recentre en boîte flottante.
+        Fermé : hors flux (position:fixed, translaté hors écran) → ne
+        prend aucune place dans le contenu pleine largeur.
+  ============================================================ */
+  body.cal-open{ overflow:hidden; }
+  .col-right{ position:fixed; inset:0; z-index:75; background:#fff; transform:translateY(100%); transition:transform .32s var(--ease); display:flex; flex-direction:column; overflow:hidden; padding:0 clamp(12px,3vw,20px) clamp(12px,3vw,20px); padding-top:env(safe-area-inset-top); padding-bottom:max(12px,env(safe-area-inset-bottom)); will-change:transform; }
+  .col-right.open{ transform:none; }
+  .col-right .aids{ flex:0 0 auto; margin-bottom:12px; }
+  /* Le défilement borné est porté par .calendar (jamais la page), en VERTICAL uniquement.
+     L'en-tête des jours (.cal-weekdays) est collant en haut du même conteneur : il partage
+     donc EXACTEMENT la largeur de colonne de la grille, barre de défilement comprise →
+     aucun décalage ni rognage du dimanche, aucun débordement horizontal. */
+  .col-right .calendar{ flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
+  .col-right .cal-weekdays{ position:sticky; top:0; z-index:4; }
+  .col-right .total-bar{ flex:0 0 auto; margin-top:12px; }
 
   /* ============================================================
      9. TOTAL
@@ -255,7 +353,7 @@
   .est-card .v{ font-size:18px; font-weight:750; letter-spacing:-.01em; font-variant-numeric:tabular-nums; margin-top:3px; }
   .est-card.net{ background:color-mix(in srgb, var(--accent) 9%, #fff); border-color:var(--accent-edge); }
   .est-card.net .v{ color:var(--accent-deep); }
-  .est-note{ font-size:11px; color:var(--faint); margin:11px 0 0; }
+  .est-note{ font-size:11px; color:var(--muted); margin:11px 0 0; }
 
   /* ============================================================
      11. COMMENTAIRE
@@ -278,7 +376,7 @@
   .sign-zone.dragover{ border-color:var(--accent); background:color-mix(in srgb, var(--accent) 7%, #fff); }
   .sign-zone.has-ink{ border-style:solid; border-color:var(--line-2); }
   .sign-zone canvas{ position:absolute; inset:0; width:100%; height:100%; touch-action:none; cursor:crosshair; }
-  .sign-empty{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:10px; font-size:11.5px; color:var(--faint); pointer-events:none; }
+  .sign-empty{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:10px; font-size:11.5px; color:var(--muted); pointer-events:none; }
   .sign-zone.has-ink .sign-empty{ display:none; }
   .sign-actions{ display:flex; gap:8px; margin-top:9px; align-items:center; flex-wrap:wrap; }
   .sign-meta{ display:flex; gap:18px; margin-top:11px; }
@@ -288,7 +386,7 @@
   .sign-meta input:focus{ border-bottom-color:var(--accent); }
   .sign-meta input[type=date]{ width:100%; min-width:0; appearance:none; -webkit-appearance:none; }
   .date-print{ display:none; }
-  .foot-note{ font-size:11px; color:var(--faint); text-align:center; margin:4px 0 0; }
+  .foot-note{ font-size:11px; color:var(--muted); text-align:center; margin:4px 0 0; }
 
   /* ============================================================
      13. FICHE DU JOUR (mobile) + TIROIR DE PERSONNALISATION
@@ -325,9 +423,28 @@
   .switch .thumb{ position:absolute; top:3px; left:3px; width:20px; height:20px; background:#fff; border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:transform .18s var(--ease); }
   .switch input:checked + .track{ background:var(--accent); }
   .switch input:checked + .track + .thumb{ transform:translateX(18px); }
-  .dnote{ font-size:11.5px; color:var(--faint); line-height:1.5; margin:10px 0 0; }
+  .dnote{ font-size:11.5px; color:var(--muted); line-height:1.5; margin:10px 0 0; }
   .danger{ color:#C0392B; border-color:color-mix(in srgb,#C0392B 30%,var(--line-3)); }
   .danger:hover{ border-color:#C0392B; background:#FFF5F4; }
+
+  /* Export / import de données */
+  .data-actions{ display:flex; flex-wrap:wrap; gap:9px; margin-top:12px; }
+  .data-actions .btn{ flex:1 1 auto; justify-content:center; min-width:0; }
+
+  /* Profils d'identité */
+  .prof-add{ display:flex; gap:8px; margin-top:12px; align-items:stretch; }
+  .prof-name{ flex:1 1 auto; min-width:0; font-family:var(--font); font-size:13.5px; color:var(--ink); border:1px solid var(--line-3); border-radius:10px; padding:9px 12px; outline:none; background:#fff; transition:border-color .16s var(--ease), box-shadow .16s var(--ease); }
+  .prof-name::placeholder{ color:var(--faint); }
+  .prof-name:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-ring); }
+  .prof-add .btn{ flex:0 0 auto; }
+  .prof-list{ display:flex; flex-direction:column; gap:8px; margin-top:12px; }
+  .prof-list:empty{ display:none; }
+  .prof-item{ display:flex; align-items:center; gap:10px; padding:9px 11px; border:1px solid var(--line-2); border-radius:11px; background:var(--paper-2); min-width:0; }
+  .prof-item .pi-name{ flex:1 1 auto; min-width:0; font-size:13.5px; font-weight:600; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .prof-item .pi-actions{ display:flex; gap:6px; flex:0 0 auto; }
+  .prof-item .btn.small{ padding:6px 10px; font-size:12px; }
+  .prof-empty{ margin-top:10px; }
+  .prof-empty.hide{ display:none; }
 
   /* Fiche du jour — feuille basse mobile */
   .day-sheet{ position:fixed; left:0; right:0; bottom:0; z-index:80; background:#fff; border-radius:20px 20px 0 0; box-shadow:var(--shadow-pop); transform:translateY(100%); transition:transform .3s var(--ease); padding:0 18px calc(18px + env(safe-area-inset-bottom)); overscroll-behavior:contain; }
@@ -364,114 +481,88 @@
 
   /* ============================================================
      15. SYSTÈME RESPONSIVE CONTINU
-        Paliers : petit téléphone → téléphone (panneau plein écran)
-        → tablette / paysage (calendrier EN LIGNE) → bureau 2 colonnes
-        → ultra-large, + garde « paysage court ». Toutes les dimensions
-        de cellule viennent des jetons --cell-min / --slot-h / --full-size,
-        donc l'interface s'adapte en continu au lieu de basculer d'un coup.
+        Le calendrier est TOUJOURS en pop-up (section 8b) : plus de
+        split 2 colonnes, plus de calendrier en ligne. Le contenu du
+        document occupe la pleine largeur et se répartit en colonnes
+        internes (.lay-grid) sur grand écran. Toutes les dimensions de
+        cellule viennent des jetons --cell-min / --slot-h / --full-size.
+        Paliers : petit téléphone → téléphone → tablette → bureau →
+        ultra-large, + garde « paysage court ».
   ============================================================ */
 
-  /* --- Petits téléphones : on resserre encore un cran --- */
+  /* --- Petits téléphones : on resserre encore un cran (hexagone réduit pour tenir
+         7 colonnes sans rogner le dimanche). --- */
   @media screen and (max-width:389px){
-    :root{ --cell-min:60px; --slot-h:46px; --num-size:12px; }
+    :root{ --cell-min:60px; --slot-h:44px; --num-size:12px; --full-size:22px; }
     .top-actions .btn span{ display:none; } .top-actions .btn{ padding:9px; }
+    .cell{ padding:6px 4px 6px; }
   }
 
-  /* --- Comportement tactile partagé (téléphone + tablette en ligne, sous le bureau) --- */
+  /* --- Comportement tactile de la grille (téléphone + tablette) : la fiche du jour
+         remplace l'édition en ligne de l'activité. --- */
   @media screen and (max-width:899px){
     .cell-tap{ display:block; }                  /* le corps de la cellule ouvre la fiche du jour */
     .cell-act{ display:none; }                   /* l'activité se saisit dans la fiche basse */
     .cell{ padding:6px 6px 7px; gap:4px; }
     .slot::after{ display:none; }                /* pas d'étiquettes M/A au survol sur tactile */
-    .cal-grid{ grid-auto-rows:minmax(var(--cell-min),auto); }  /* rangées à la hauteur du contenu (défilement) */
     .cell.today .num{ width:21px; height:21px; }
   }
-  @media screen and (max-width:560px){
+
+  /* --- Sous 700px : la pop-up calendrier occupe tout l'écran (feuille plein écran).
+         La grille défile ; les rangées épousent la hauteur du contenu. --- */
+  @media screen and (max-width:699px){
+    .cal-grid{ grid-auto-rows:minmax(var(--cell-min),auto); }
     .info{ grid-template-columns:1fr; }
     .signs{ grid-template-columns:1fr; }
-  }
-
-  /* --- Téléphone (≤699px) : le calendrier est un panneau plein écran qui glisse --- */
-  @media screen and (max-width:699px){
-    body.cal-open{ overflow:hidden; }
-    .cal-trigger{ display:flex; }
-    .cal-head{ display:none; }
-    .col-right{ position:fixed; inset:0; z-index:75; background:#fff; transform:translateY(100%); transition:transform .32s var(--ease); display:flex; flex-direction:column; overflow:hidden; padding:0 12px 12px; padding-top:env(safe-area-inset-top); padding-bottom:max(12px,env(safe-area-inset-bottom)); }
-    .col-right.open{ transform:none; }
-    .cal-mobile-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:14px 2px; border-bottom:1px solid var(--line); margin-bottom:12px; flex:0 0 auto; }
-    .cal-mobile-head .cal-title{ font-size:17px; font-weight:750; letter-spacing:-.01em; }
-    .col-right .aids{ flex:0 0 auto; margin-bottom:12px; }
-    .col-right .calendar{ flex:1 1 auto; min-height:0; }
-    .col-right .cal-grid{ overflow:auto; overscroll-behavior:contain; }
-    .col-right .total-bar{ flex:0 0 auto; margin-top:12px; }
-    .info{ grid-template-columns:1fr; }
     .doc-head{ flex-direction:column; align-items:stretch; gap:12px; }
-    .doc-head .lead{ flex:0 0 auto; min-width:0; }   /* évite le grand vide (basis 260px en colonne) */
+    .doc-head .lead{ flex:0 0 auto; min-width:0; }
     .period{ justify-content:flex-start; }
     .brand-text{ display:none; }
     .day-tot{ display:none; }                    /* la pastille indique déjà l'état */
     .def-act{ font-size:16px; }                  /* évite le zoom iOS au focus */
   }
 
-  /* --- Tablette portrait & paysage téléphone (700–899px) : calendrier EN LIGNE,
-         plus de panneau ni de bouton déclencheur — fini la zone morte des tablettes. --- */
-  @media screen and (min-width:700px) and (max-width:899px){
-    :root{ --cell-min:74px; --slot-h:40px; }
-    .col-right{ position:static; transform:none; z-index:auto; }
-    .cal-trigger, .cal-mobile-head{ display:none; }
-    .col{ background:var(--paper); border:1px solid var(--line-2); border-radius:var(--radius); box-shadow:var(--shadow-sheet); padding:clamp(16px,2.4vw,22px); }
-    .workspace{ gap:18px; }
+  /* --- Tablette (≥700px) : le contenu prend l'allure d'une feuille (carte encadrée),
+         et la pop-up calendrier se recentre en boîte flottante au-dessus d'un voile. --- */
+  @media screen and (min-width:700px){
+    :root{ --cell-min:70px; --slot-h:44px; }
+    .col-left{ background:var(--paper); border:1px solid var(--line-2); border-radius:var(--radius); box-shadow:var(--shadow-sheet); padding:clamp(18px,2.4vw,28px); }
     .signs{ grid-template-columns:1fr 1fr; }
+
+    /* La pop-up calendrier : boîte flottante centrée (au lieu du plein écran glissant) */
+    .col-right{ inset:auto; top:50%; left:50%; width:min(760px, calc(100vw - 48px)); max-height:min(88vh, 760px); transform:translate(-50%, calc(-50% + 14px)); border-radius:var(--radius); box-shadow:var(--shadow-pop); border:1px solid var(--line-2); padding:0 clamp(18px,2.4vw,26px) clamp(18px,2.4vw,24px); opacity:0; visibility:hidden; transition:transform .26s var(--ease), opacity .22s var(--ease), visibility .22s var(--ease); }
+    .col-right.open{ transform:translate(-50%,-50%); opacity:1; visibility:visible; }
+    .col-right .cal-grid{ max-height:none; }
   }
 
-  /* --- Bureau (≥900px) : deux colonnes plein écran, hauteur de page calée (aucun scroll global) --- */
+  /* --- Bureau (≥900px) : cellules plus compactes, édition d'activité en ligne dans la pop-up. --- */
   @media screen and (min-width:900px){
-    :root{ --cell-min:78px; --slot-h:30px; --num-size:13px; --full-size:24px; }
-    body{ overflow:hidden; }
-    .page{ height:calc(100vh - var(--topbar-h)); height:calc(100dvh - var(--topbar-h)); padding:clamp(14px,2.2vw,24px) clamp(14px,2.4vw,28px); display:block; }
-    .sheet{ height:100%; margin:0 auto; display:flex; flex-direction:column; }
-    .doc-head{ flex:0 0 auto; padding-bottom:14px; border-bottom:1px solid var(--line); }
-    .workspace{ margin-top:16px; flex:1 1 auto; min-height:0; display:flex; flex-direction:row; gap:clamp(16px,1.8vw,26px); align-items:stretch; }
-    .col{ background:var(--paper); border:1px solid var(--line-2); border-radius:var(--radius); box-shadow:var(--shadow-sheet); padding:clamp(16px,1.5vw,24px); min-height:0; }
-
-    /* Colonne gauche : répartition verticale, signatures ancrées en bas */
-    .col-left{ flex:1 1 0; display:flex; flex-direction:column; gap:18px; overflow:hidden; }
-    .col-left .info{ flex:0 0 auto; }
-    .col-left .est{ flex:0 0 auto; }
-    .col-left .comment-block{ flex:1 1 auto; min-height:64px; }
-    .col-left .comment{ flex:1 1 auto; min-height:56px; }
-    .col-left .signs{ flex:0 0 auto; }
-
-    /* Colonne droite : calendrier qui occupe la hauteur restante */
-    .col-right{ flex:1.18 1 0; display:flex; flex-direction:column; overflow:hidden; }
-    .col-right .cal-head{ flex:0 0 auto; }
-    .col-right .aids{ flex:0 0 auto; margin-bottom:12px; }
-    .col-right .calendar{ flex:1 1 auto; min-height:120px; }
-    .col-right .cal-grid{ overflow:auto; overscroll-behavior:contain; }
-
-    .signs{ gap:18px; }
-    .sign-zone{ height:84px; }
+    :root{ --cell-min:66px; --slot-h:40px; --num-size:13px; --full-size:24px; }
+    .col-right{ width:min(880px, calc(100vw - 64px)); }
   }
 
-  /* --- Grand bureau --- */
-  @media screen and (min-width:1280px){ :root{ --cell-min:84px; } }
+  /* --- Grand écran (≥1000px) : le contenu pleine largeur se scinde en deux colonnes
+         internes équilibrées — infos + estimation | commentaire + signatures. --- */
+  @media screen and (min-width:1000px){
+    .lay-grid{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:clamp(24px,3vw,44px); align-items:start; }
+    .lay-a, .lay-b{ gap:22px; }
+  }
 
-  /* --- Ultra-large : on élargit la feuille et on aère la grille --- */
+  /* --- Ultra-large : on élargit la feuille et on aère. --- */
   @media screen and (min-width:1600px){
-    :root{ --cell-min:92px; }
-    .sheet{ max-width:1520px; }
-    .col-right{ flex:1.22 1 0; }
-    .workspace{ gap:clamp(26px,2vw,40px); }
+    .sheet{ max-width:1240px; }
+    .lay-grid{ gap:clamp(36px,3vw,60px); }
+    .col-right{ width:min(920px, calc(100vw - 80px)); }
   }
 
   /* --- Paysage court (téléphone couché, hauteur ≤560px) : on récupère du vertical.
-         Borné à ≤899px pour ne pas écraser le palier bureau sur une fenêtre large et basse. --- */
-  @media screen and (max-width:899px) and (orientation:landscape) and (max-height:560px){
+         Borné à ≤699px pour ne concerner que la pop-up plein écran. --- */
+  @media screen and (max-width:699px) and (orientation:landscape) and (max-height:560px){
     :root{ --slot-h:38px; }
     .topbar{ padding-top:max(6px,env(safe-area-inset-top)); padding-bottom:6px; }
     .col-right .aids{ margin-bottom:8px; }
     .col-right .aids .hint{ display:none; }
-    .cal-mobile-head{ padding:8px 2px; margin-bottom:8px; }
+    .cal-modal-head{ padding:8px 2px; margin-bottom:8px; }
   }
 
   @media (prefers-reduced-motion:reduce){
@@ -487,16 +578,20 @@
   body::before, body::after{ display:none !important; }
   *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
   .topbar, .aids, .est, .foot-note, .sign-actions, .overlay, .drawer, .day-sheet, .no-print,
-  .cal-head, .cal-mobile-head, .cal-trigger, .cal-weekdays, .cal-grid, .calendar{ display:none !important; }
+  #calPanel, .cal-trigger, .cal-modal-head, .cal-weekdays, .cal-grid, .calendar{ display:none !important; }
   .page{ padding:0 !important; display:block !important; height:auto !important; }
   .sheet{ max-width:none !important; width:auto !important; height:auto !important; box-shadow:none; border-radius:0; padding:0; margin:0 auto; display:block !important; }
   .doc-head{ border-bottom:none !important; padding:0 !important; margin:0 !important; }
 
   /* Ordre : en-tête, infos, tableau liste, total, commentaire, signatures */
   .workspace{ display:flex !important; flex-direction:column !important; height:auto !important; overflow:visible !important; gap:0 !important; margin:0 !important; }
-  .col-left, .col-right{ display:contents !important; }
+  .col-left{ display:contents !important; }
+  /* Les conteneurs de mise en page pleine largeur s'effacent à l'impression : leurs
+     enfants (info, estimation, commentaire, signatures) redeviennent enfants directs
+     de .workspace pour que l'ordre document (order:1…5) s'applique. */
+  .lay-grid, .lay-a, .lay-b{ display:contents !important; }
   .col{ border:none !important; box-shadow:none !important; background:transparent !important; padding:0 !important; overflow:visible !important; height:auto !important; }
-  .info{ order:1; } .print-wrap{ order:2; display:block !important; } .total-bar{ order:3; } .comment-block{ order:4; } .signs{ order:5; }
+  .info{ order:1; } .print-wrap{ order:2; display:block !important; } .comment-block{ order:4; } .signs{ order:5; }
 
   .doc-brand{ margin:0 0 4px; } .doc-brand .mark-slot{ width:18px; height:19px; }
   .eyebrow{ font-size:8px; letter-spacing:.18em; }
@@ -513,13 +608,26 @@
   .print-table thead th{ font-size:8px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); font-weight:700; text-align:left; background:#F3F4F6; padding:4px 8px; border-bottom:1px solid var(--line-2); }
   .print-table thead th.center{ text-align:center; padding-left:2px; padding-right:2px; }
   .print-table td.center{ text-align:center; }
-  .print-table tr.we td{ background:#FAFBFC; }
+  /* Deux gris distincts et TOUS DEUX TRANSPARENTS (rgba, imprimés via print-color-adjust:exact
+     plus haut) : ils laissent transparaître le filigrane « Provisoire » posé en fond (z-index:0).
+     Week-end = bleu clair ; jour ouvré non coché = gris neutre — teintes différenciées.
+     Le week-end PRIME sur « non coché » (tr.we l'emporte ; tr.nc:not(.we) ne cible que les jours
+     ouvrés) → un week-end reste identifiable comme week-end, distinct d'un jour ouvré non coché.
+     Texte des lignes non cochées (date) en --ink-soft : lisible sur ces fonds très clairs tout en
+     restant plus estompé que les lignes cochées (--ink), donc la hiérarchie visuelle tient. */
+  .print-table tr.we td{ background:rgba(70,120,180,.10); }                  /* week-end : bleu clair, transparent */
+  .print-table tr.nc:not(.we) td{ background:rgba(100,104,112,.12); }        /* jour ouvré non coché : gris neutre clair, transparent */
+  .print-table tr.nc td, .print-table tr.nc .pt-date .dn, .print-table tr.nc .pt-date .dd{ color:var(--ink-soft); }
   .pt-date{ padding:2.5px 8px; white-space:nowrap; } .pt-date .dn{ font-size:9px; color:var(--muted); text-transform:capitalize; margin-right:6px; } .pt-date .dd{ font-weight:700; font-variant-numeric:tabular-nums; font-size:11px; }
   .pt-box{ padding:2.5px 2px; } .pbox{ width:13px; height:13px; }
   .pt-act{ padding:2.5px 8px; font-size:10px; line-height:1.3; color:var(--ink); word-break:break-word; }
 
-  .total-bar{ padding:7px 13px; margin-top:0 !important; } .total-legend{ font-size:8.5px; } .total-legend .swatch{ width:10px; height:10px; }
-  .total-value .lab{ font-size:8px; letter-spacing:.1em; } .total-value .num-tot{ font-size:19px; padding-bottom:1px; border-bottom-width:2.5px; } .total-value .unit{ font-size:11px; }
+  /* Total du PDF : vit dans .print-wrap (donc imprimé même en Provisoire) ; la .total-bar
+     d'origine reste dans la pop-up calendrier (no-print). Alimenté par recalculer() → #printTotalNum. */
+  .print-total{ display:flex; align-items:baseline; justify-content:flex-end; gap:6px; margin-top:6px; padding:2px 2px 0; }
+  .print-total .pt-tot-lab{ font-size:8px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+  .print-total .pt-tot-num{ font-size:17px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--ink); border-bottom:2.5px solid var(--accent); padding-bottom:1px; }
+  .print-total .pt-tot-unit{ font-size:10px; font-weight:650; color:var(--ink-soft); }
 
   .comment-block{ margin-top:0 !important; display:block !important; }
   .section-label{ margin:11px 0 5px; font-size:9px; letter-spacing:.09em; color:var(--muted); }
@@ -537,15 +645,31 @@
 
   body.no-title .title-input{ display:none !important; }
   body.no-comment .section-label, body.no-comment .comment{ display:none !important; }
-  .print-table tr, .sign-card, .total-bar{ break-inside:avoid; }
+  .print-table tr, .sign-card, .print-total{ break-inside:avoid; }
+
+  /* Filigrane « Provisoire » sur le PDF : overlay absolu DERRIÈRE le contenu.
+     Ancré sur .page (conteneur d'impression) → n'ajoute rien à la hauteur de #sheet
+     mesurée par appliquerFit(), donc l'auto-fit une-page reste intact. */
+  .page{ position:relative !important; }
+  body.provisoire .prov-watermark{ display:flex !important; position:absolute; inset:0; z-index:0; align-items:center; justify-content:center; pointer-events:none; overflow:hidden; }
+  body.provisoire .prov-watermark span{ font-size:110px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:color-mix(in srgb,#C0392B 30%, transparent); transform:rotate(-32deg); white-space:nowrap; border:6px solid color-mix(in srgb,#C0392B 24%, transparent); padding:14px 40px; border-radius:14px; }
+  body.provisoire .sheet{ position:relative; z-index:1; }
+  /* CRA provisoire : pas de signatures dans le PDF (version non définitive, non signée). */
+  body.provisoire .signs{ display:none !important; }
 </style>
 </head>
 <body>
 
-  <div class="topbar">
+  <!-- Région d'annonces pour lecteurs d'écran (total, actions groupées, imports…) -->
+  <div class="sr-only" id="liveRegion" aria-live="polite" role="status"></div>
+
+  <div class="topbar" role="banner">
     <div class="brand">
       <span class="mark-slot" id="markTop"></span>
       <div class="brand-text"><b>Générateur de CRA</b><span>Compte rendu d'activité</span></div>
+      <span class="save-witness" id="saveWitness" aria-live="polite" role="status" hidden>
+        <span class="sw-dot" aria-hidden="true"></span><span class="sw-text"></span>
+      </span>
     </div>
     <div class="top-actions">
       <button class="btn small ghost" id="openSettings" title="Personnaliser">
@@ -559,12 +683,14 @@
     </div>
   </div>
 
-  <div class="page">
+  <div class="page" role="main">
+    <!-- Filigrane « Provisoire » du PDF — overlay absolu, n'ajoute rien à la hauteur mesurée par appliquerFit() -->
+    <div class="prov-watermark" id="provWatermark" aria-hidden="true"><span>Provisoire</span></div>
     <div class="sheet" id="sheet">
 
       <div class="doc-head">
         <div class="lead">
-          <div class="doc-brand"><span class="mark-slot" id="markDoc"></span><span class="eyebrow">Compte rendu d'activité</span></div>
+          <div class="doc-brand"><span class="mark-slot" id="markDoc"></span><span class="eyebrow">Compte rendu d'activité</span><span class="prov-badge" id="provBadge">Provisoire</span></div>
           <input class="title-input" id="docTitle" placeholder="Titre du document" aria-label="Titre du document">
         </div>
         <div class="period">
@@ -577,11 +703,20 @@
 
         <!-- ===== Colonne gauche : infos, estimation, commentaire, signatures, tableau PDF ===== -->
         <div class="col col-left">
-          <button class="cal-trigger btn no-print" id="openCal" type="button">
-            <span class="lhs"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> Remplir le calendrier</span>
-            <span class="cal-count" id="calCount">0 j</span>
+
+          <!-- Carte de synthèse : action principale du contenu (ouvrir le calendrier en pop-up).
+               Affiche le nombre de jours cochés (dérivé de recalculer → #synthDays). -->
+          <button class="cal-trigger no-print" id="openCal" type="button" aria-haspopup="dialog">
+            <span class="ct-ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+            <span class="ct-text">
+              <span class="ct-title">Modifier le calendrier</span>
+              <span class="ct-sub" id="synthSub"><b class="ct-count" id="synthDays">0 j</b> cochés ce mois</span>
+            </span>
+            <span class="ct-go" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
           </button>
 
+          <div class="lay-grid">
+          <div class="lay-a">
           <div class="info">
             <div class="field"><label for="fSociete">Société sous-traitante</label><input class="value" id="fSociete" data-k="societe" placeholder="Votre dénomination"></div>
             <div class="field"><label for="fClient">Client final</label><input class="value" id="fClient" data-k="client" placeholder="Client final"></div>
@@ -602,7 +737,9 @@
             </div>
             <p class="est-note">Indicatif, calculé sur les demi-journées cochées. N'apparaît pas dans le PDF.</p>
           </div>
+          </div><!-- /.lay-a -->
 
+          <div class="lay-b">
           <div class="comment-block">
             <p class="section-label">Commentaire</p>
             <div class="comment" id="comment" contenteditable="true" data-placeholder="Remarques, congés, jours fériés, précisions sur la période…" role="textbox" aria-multiline="true" aria-label="Commentaire"></div>
@@ -634,64 +771,81 @@
               </div>
             </div>
           </div>
+          </div><!-- /.lay-b -->
+          </div><!-- /.lay-grid -->
 
           <!-- Tableau liste destiné au PDF uniquement -->
           <div class="print-wrap">
             <table class="print-table">
-              <colgroup><col style="width:9%"><col style="width:26%"><col style="width:13%"><col style="width:15%"><col style="width:37%"></colgroup>
+              <colgroup><col style="width:12%"><col style="width:12%"><col style="width:24%"><col style="width:52%"></colgroup>
               <thead>
-                <tr><th class="center">Journée</th><th>Date</th><th class="center">Matin</th><th class="center">Après-midi</th><th>Activité réalisée</th></tr>
+                <tr><th class="center">Matin</th><th class="center">Après-midi</th><th>Date</th><th>Activité réalisée</th></tr>
               </thead>
               <tbody id="pdfBody"></tbody>
             </table>
+            <div class="print-total"><span class="pt-tot-lab">Total</span><span class="pt-tot-num" id="printTotalNum">0</span><span class="pt-tot-unit">jours</span></div>
           </div>
 
           <p class="foot-note no-print">Données enregistrées localement sur cet appareil uniquement. Vérifiez les informations avant envoi.</p>
-        </div>
-
-        <!-- ===== Colonne droite : calendrier en grille ===== -->
-        <div class="col col-right" id="calPanel">
-          <div class="cal-mobile-head no-print">
-            <span class="cal-title">Calendrier</span>
-            <button class="btn small primary" id="closeCal" type="button">Terminé</button>
-          </div>
-          <div class="cal-head no-print">
-            <span class="cal-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
-            <span class="cal-title">Calendrier</span>
-          </div>
-
-          <div class="aids no-print">
-            <div class="grp">
-              <input class="def-act" id="defAct" placeholder="Activité par défaut — ex. Développement web — Client">
-              <button class="btn small" id="applyAct">Appliquer</button>
-            </div>
-            <div class="grp">
-              <button class="btn small" id="checkAll">Jours ouvrés</button>
-              <button class="btn small ghost" id="clearAll">Tout décocher</button>
-            </div>
-            <p class="hint">Touchez la <b>moitié gauche (matin)</b> ou <b>droite (après-midi)</b>, ou l'<b>hexagone</b> en haut à droite pour la <b>journée complète</b>. Au PC, <b>clic-glissé</b> coche plusieurs jours. Demi-journée = <b>0,5 j</b>.</p>
-          </div>
-
-          <div class="calendar">
-            <div class="cal-weekdays" id="weekdays"></div>
-            <div class="cal-grid" id="grid"></div>
-          </div>
-
-          <div class="total-bar">
-            <div class="total-legend"><span class="swatch" aria-hidden="true"></span><b>0,5 j</b> par demi-journée</div>
-            <div class="total-value"><span class="lab">Total</span><span class="num-tot" id="totalNum">0</span><span class="unit">jours</span></div>
-          </div>
         </div>
 
       </div>
     </div>
   </div>
 
+  <!-- ===== Pop-up calendrier (modale sur tous les viewports) =====
+       Placée au niveau racine (hors de .page) pour vivre dans le MÊME
+       contexte d'empilement que son voile #calOverlay : la modale (z-index
+       élevé) se pose ainsi TOUJOURS au-dessus du voile. Le calendrier reste
+       dérivé du même `state` — aucune logique dupliquée. Masquée à l'impression. -->
+  <div class="overlay no-print" id="calOverlay"></div>
+  <div class="col col-right no-print" id="calPanel" aria-hidden="true">
+    <!-- Région d'annonces PROPRE à la modale : quand le calendrier est ouvert (aria-modal),
+         certains lecteurs d'écran restreignent l'arbre au sous-arbre de la modale et n'entendent
+         plus #liveRegion (hors modale). annoncer() reflète donc ici le total pendant l'ouverture. -->
+    <div class="sr-only" id="calLiveRegion" aria-live="polite" role="status"></div>
+    <div class="cal-modal-head">
+      <span class="cal-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+      <span class="cal-title" id="calMobileTitle" tabindex="-1">Calendrier</span>
+      <button class="btn small primary" id="closeCal" type="button">Terminé</button>
+    </div>
+
+    <div class="aids">
+      <div class="grp">
+        <input class="def-act" id="defAct" placeholder="Activité par défaut — ex. Développement web — Client">
+        <button class="btn small" id="applyAct">Appliquer</button>
+      </div>
+      <div class="grp">
+        <button class="btn small" id="checkAll">Jours ouvrés</button>
+        <button class="btn small ghost" id="clearAll">Tout décocher</button>
+      </div>
+      <div class="presets" id="presets" aria-label="Modèles d'activité">
+        <button class="preset-add" id="presetAdd" type="button" aria-label="Enregistrer l'activité saisie comme modèle" title="Enregistrer comme modèle">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          <span>Modèle</span>
+        </button>
+        <span class="preset-empty" id="presetEmpty">Enregistrez vos activités fréquentes en modèles réutilisables.</span>
+        <span class="preset-list" id="presetList"></span>
+      </div>
+      <p class="hint">Touchez la <b>moitié gauche (matin)</b> ou <b>droite (après-midi)</b>, ou l'<b>hexagone</b> en haut à droite pour la <b>journée complète</b>. Au PC, <b>clic-glissé</b> coche plusieurs jours. Demi-journée = <b>0,5 j</b>.</p>
+    </div>
+
+    <div class="calendar">
+      <div class="cal-weekdays" id="weekdays"></div>
+      <div class="cal-grid" id="grid"></div>
+    </div>
+
+    <div class="total-bar">
+      <div class="total-legend"><span class="swatch" aria-hidden="true"></span><b>0,5 j</b> par demi-journée</div>
+      <div class="total-value"><span class="lab">Total</span><span class="num-tot" id="totalNum">0</span><span class="unit">jours</span></div>
+    </div>
+  </div>
+
   <!-- ===== Fiche du jour (mobile) ===== -->
   <div class="overlay" id="dayOverlay"></div>
-  <aside class="day-sheet" id="daySheet" aria-hidden="true" aria-label="Renseigner le jour">
+  <aside class="day-sheet" id="daySheet" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="daySheetTitle">
     <div class="grab-zone" id="daySheetGrab" aria-hidden="true"><div class="grab"></div></div>
-    <div class="day-sheet-head"><span class="dt" id="daySheetTitle">Jour</span>
+    <div class="day-sheet-head"><span class="dt" id="daySheetTitle" tabindex="-1">Jour</span>
       <button class="btn small ghost iconly" id="daySheetClose" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
     <button class="day-full-btn" type="button" id="daySheetFull" aria-pressed="false">
@@ -699,8 +853,8 @@
       Journée complète
     </button>
     <div class="seg">
-      <button class="seg-btn" type="button" data-slot="am"><span class="dot"></span>Matin</button>
-      <button class="seg-btn" type="button" data-slot="pm"><span class="dot"></span>Après-midi</button>
+      <button class="seg-btn" type="button" data-slot="am" aria-pressed="false"><span class="dot" aria-hidden="true"></span>Matin</button>
+      <button class="seg-btn" type="button" data-slot="pm" aria-pressed="false"><span class="dot" aria-hidden="true"></span>Après-midi</button>
     </div>
     <textarea class="day-act-full" id="daySheetAct" placeholder="Activité réalisée…"></textarea>
     <div class="day-sheet-foot">
@@ -711,8 +865,8 @@
 
   <!-- ===== Tiroir de personnalisation ===== -->
   <div class="overlay" id="overlay"></div>
-  <aside class="drawer" id="drawer" aria-hidden="true" aria-label="Personnalisation">
-    <div class="drawer-head"><h2>Personnalisation</h2>
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="drawerTitle">
+    <div class="drawer-head"><h2 id="drawerTitle" tabindex="-1">Personnalisation</h2>
       <button class="btn small ghost iconly" id="closeSettings" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
     <div class="drawer-body">
@@ -733,11 +887,36 @@
       </div>
       <div class="dgroup"><h3>Affichage</h3>
         <div class="drow"><span class="lbl">Motif hexagone en fond</span>
-          <label class="switch"><input type="checkbox" id="motifToggle" checked><span class="track"></span><span class="thumb"></span></label>
+          <label class="switch"><input type="checkbox" id="motifToggle" checked aria-label="Motif hexagone en fond"><span class="track"></span><span class="thumb"></span></label>
         </div>
+        <div class="drow"><span class="lbl" id="provLbl">CRA provisoire (brouillon)</span>
+          <label class="switch"><input type="checkbox" id="provToggle" aria-labelledby="provLbl"><span class="track"></span><span class="thumb"></span></label>
+        </div>
+        <p class="dnote">Ajoute une mention « Provisoire » à l'écran et un filigrane sur le PDF, pour signaler une version non définitive.</p>
+      </div>
+      <div class="dgroup"><h3>Profils d'identité</h3>
+        <p class="dnote">Enregistrez société, client, destinataire, rôles, couleur, logo, motif et TJM comme profil réutilisable. Le calendrier et les signatures restent propres à chaque CRA.</p>
+        <div class="prof-add">
+          <input class="prof-name" id="profName" placeholder="Nom du profil — ex. Client A" aria-label="Nom du nouveau profil" maxlength="60">
+          <button class="btn small" id="profSave" type="button">Enregistrer</button>
+        </div>
+        <div class="prof-list" id="profList"></div>
+        <p class="prof-empty dnote" id="profEmpty">Aucun profil enregistré pour l'instant.</p>
       </div>
       <div class="dgroup"><h3>Mes données</h3>
         <p class="dnote">Vos informations, couleur, logo, TJM, calendrier et signatures sont enregistrés uniquement dans ce navigateur, sur cet appareil. Rien n'est envoyé en ligne.</p>
+        <div class="data-actions">
+          <button class="btn small" id="exportData" type="button">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+            Exporter (.json)
+          </button>
+          <label class="btn small ghost" id="importLabel">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+            Importer (.json)
+            <input type="file" id="importFile" accept="application/json,.json" hidden>
+          </label>
+        </div>
+        <p class="dnote">Sauvegarde complète (infos, calendrier, archive, modèles, signatures). Réimportable ici ou sur un autre appareil, entièrement hors-ligne.</p>
         <div style="margin-top:12px;"><button class="btn small danger" id="clearData" type="button">Effacer mes données enregistrées</button></div>
       </div>
     </div>
@@ -769,21 +948,113 @@
   ============================================================ */
   var monthSel=document.getElementById('monthSel'), yearSel=document.getElementById('yearSel');
   var weekdaysEl=document.getElementById('weekdays'), grid=document.getElementById('grid'), pdfBody=document.getElementById('pdfBody');
-  var totalNum=document.getElementById('totalNum'), defAct=document.getElementById('defAct'), calCount=document.getElementById('calCount');
+  var totalNum=document.getElementById('totalNum'), defAct=document.getElementById('defAct'), synthDays=document.getElementById('synthDays'), synthSub=document.getElementById('synthSub');
+  var printTotalNum=document.getElementById('printTotalNum');   // total repris dans le PDF (imprimé même en Provisoire)
   var tjmInput=document.getElementById('tjm'), chargesInput=document.getElementById('charges');
   var estDays=document.getElementById('estDays'), estCa=document.getElementById('estCa'), estNet=document.getElementById('estNet');
+
+  /* ============================================================
+     TÉMOIN D'ÉTAT DE SAUVEGARDE (aria-live) — dérive de save()
+        États : cours (enregistrement…) / ok (enregistré) /
+        echec (quota) / indispo (localStorage absent). Le témoin
+        « ok » s'estompe seul ; « échec »/« indispo » persistent.
+  ============================================================ */
+  var witnessEl=document.getElementById('saveWitness');
+  var witnessDot=witnessEl?witnessEl.querySelector('.sw-dot'):null;
+  var witnessText=witnessEl?witnessEl.querySelector('.sw-text'):null;
+  var witnessTimer=null;
+  var LIB_STATUT={ cours:'Enregistrement…', ok:'Enregistré', echec:'Échec — pensez à exporter', indispo:'Sauvegarde locale indisponible — exportez' };
+  function setStatut(etat){
+    if(!witnessEl) return;
+    var txt=LIB_STATUT[etat]||''; if(!txt){ witnessEl.hidden=true; return; }
+    witnessEl.hidden=false;
+    witnessEl.classList.remove('is-cours','is-ok','is-warn');
+    witnessEl.classList.add(etat==='cours'?'is-cours':(etat==='ok'?'is-ok':'is-warn'));
+    witnessText.textContent=txt;
+    if(witnessTimer){ clearTimeout(witnessTimer); witnessTimer=null; }
+    if(etat==='ok'){ witnessTimer=setTimeout(function(){ if(!witnessEl.classList.contains('is-warn')){ witnessEl.hidden=true; } }, 2200); }
+  }
+
+  /* ============================================================
+     ANNONCES ACCESSIBLES (aria-live) — dérivent de l'état
+        Un seul point d'annonce (annoncer) alimenté par recalculer()
+        (total) et les actions groupées. Il ÉCRIT dans la région
+        contextuellement audible : quand le calendrier est ouvert
+        (aria-modal), le lecteur d'écran peut restreindre son arbre au
+        sous-arbre de la modale, donc on annonce via #calLiveRegion
+        (DANS la modale) ; sinon via #liveRegion (page). Aucun état
+        dupliqué : la même chaîne, routée vers la bonne cible.
+        Texte via textContent uniquement.
+  ============================================================ */
+  var liveEl=document.getElementById('liveRegion');
+  var calLiveEl=document.getElementById('calLiveRegion');
+  var liveTimer=null;
+  function annoncer(msg){
+    // La modale calendrier est-elle ouverte ? Si oui, annoncer À L'INTÉRIEUR d'elle.
+    var cible=(calLiveEl && document.body.classList.contains('cal-open'))?calLiveEl:liveEl;
+    if(!cible) return;
+    // vider puis réécrire force certains lecteurs à re-annoncer un texte identique
+    cible.textContent='';
+    if(liveTimer) clearTimeout(liveTimer);
+    liveTimer=setTimeout(function(){ cible.textContent=msg; }, 40);
+  }
+
+  /* ============================================================
+     GESTION DU FOCUS DANS LES SURFACES MODALES (WCAG 2.4.3 / 2.4.11)
+        Fonction générique partagée par la fiche du jour, le tiroir et
+        le calendrier plein écran. À l'ouverture : mémorise le
+        déclencheur, déplace le focus dans le panneau, piège Tab.
+        À la fermeture : retire le piège et rend le focus.
+  ============================================================ */
+  var SEL_FOCUS='a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  function focusablesVisibles(panneau){
+    return Array.prototype.filter.call(panneau.querySelectorAll(SEL_FOCUS), function(el){
+      if(el.hidden) return false;
+      return !!(el.offsetWidth||el.offsetHeight||el.getClientRects().length);
+    });
+  }
+  function gererModale(panneau, declencheur, premier){
+    if(!panneau) return function(){};
+    var precedent=(declencheur&&declencheur.focus)?declencheur:document.activeElement;
+    // Focus initial : élément fourni, sinon 1er focusable, sinon le panneau lui-même.
+    var cible=premier||focusablesVisibles(panneau)[0]||panneau;
+    // Laisse l'ouverture (transition) se poser avant de déplacer le focus.
+    setTimeout(function(){ try{ cible.focus({preventScroll:true}); }catch(e){ try{ cible.focus(); }catch(_){} } }, 60);
+    function onKey(e){
+      if(e.key!=='Tab') return;
+      var f=focusablesVisibles(panneau); if(!f.length){ e.preventDefault(); return; }
+      var premierF=f[0], dernierF=f[f.length-1], actif=document.activeElement;
+      if(e.shiftKey){ if(actif===premierF||!panneau.contains(actif)){ e.preventDefault(); dernierF.focus(); } }
+      else { if(actif===dernierF||!panneau.contains(actif)){ e.preventDefault(); premierF.focus(); } }
+    }
+    panneau.addEventListener('keydown', onKey);
+    // Fonction de libération : retire le piège et rend le focus au déclencheur.
+    return function relacher(){
+      panneau.removeEventListener('keydown', onKey);
+      if(precedent&&precedent.focus){ try{ precedent.focus({preventScroll:true}); }catch(e){ try{ precedent.focus(); }catch(_){} } }
+    };
+  }
 
   /* ============================================================
      PERSISTANCE LOCALE (protégée si localStorage indisponible)
   ============================================================ */
   var LS = (function(){ try{ var t='__cra__'; localStorage.setItem(t,'1'); localStorage.removeItem(t); return localStorage; }catch(e){ return null; } })();
   var STORE_KEY='cra_app_v3';
+  var PROFILES_KEY='cra_profiles_v1';   // clé séparée : profils d'identité réutilisables
   // Source de vérité du calendrier : state.days = { [numJour]: {am, pm, act} }
-  var state = { fields:{}, accent:'#E2A400', mark:'hex', logo:null, motif:true, tjm:'', charges:'', sig:{left:null,right:null}, month:null, year:null, days:{} };
+  // presets = modèles de libellés d'activité ; archive = { 'AAAA-MM': {days} } (jours du mois sérialisés)
+  var state = { fields:{}, accent:'#E2A400', mark:'hex', logo:null, motif:true, provisoire:false, tjm:'', charges:'', sig:{left:null,right:null}, month:null, year:null, days:{}, presets:[], archive:{} };
   var saveTimer=null;
-  function save(){ if(!LS) return; try{ LS.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){} }
-  function saveSoon(){ if(saveTimer) clearTimeout(saveTimer); saveTimer=setTimeout(save,300); }
+  // save() renvoie un booléen : true si setItem a réussi, false sinon (quota, LS indisponible).
+  function save(){
+    if(!LS){ setStatut('indispo'); return false; }
+    try{ LS.setItem(STORE_KEY, JSON.stringify(state)); setStatut('ok'); return true; }
+    catch(e){ setStatut('echec'); return false; }
+  }
+  function saveSoon(){ if(saveTimer) clearTimeout(saveTimer); setStatut('cours'); saveTimer=setTimeout(save,300); }
   function load(){ if(!LS) return null; try{ return JSON.parse(LS.getItem(STORE_KEY)||'null'); }catch(e){ return null; } }
+  function chargerProfils(){ if(!LS) return []; try{ var a=JSON.parse(LS.getItem(PROFILES_KEY)||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+  function enregistrerProfils(list){ if(!LS) return false; try{ LS.setItem(PROFILES_KEY, JSON.stringify(list)); return true; }catch(e){ return false; } }
 
   /* ============================================================
      SÉLECTEURS MOIS / ANNÉE
@@ -823,7 +1094,7 @@
     var e=etatJour(j);
     var cls='cell'+(we?' we':'')+(sel?' sel':'')+(estAuj?' today':'');
     var actEsc=(j.act||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    return '<div class="'+cls+'" data-d="'+d+'">'+
+    return '<div class="'+cls+'" data-d="'+d+'"'+(estAuj?' aria-current="date"':'')+'>'+
       '<button class="cell-tap" type="button" aria-label="Renseigner le '+d+'"></button>'+
       '<div class="cell-top"><span class="num">'+d+'</span>'+
         '<span class="day-tot">'+(demi?fmt(demi)+' j':'')+'</span>'+
@@ -879,14 +1150,17 @@
     var nb=new Date(y,m+1,0).getDate(), html='';
     for(var d=1;d<=nb;d++){
       var wd=new Date(y,m,d).getDay(), we=(wd===0||wd===6), dd=(d<10?'0'+d:''+d);
-      var j=jour(d), pleine=j.am&&j.pm;
+      var j=jour(d), coche=j.am||j.pm;
       var actEsc=(j.act||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      html+='<tr'+(we?' class="we"':'')+'>'+
-        '<td class="center pt-box"><span class="pbox'+(pleine?' on':'')+'"></span></td>'+
-        '<td class="pt-date"><span class="dn">'+JOURS_COURTS[wd]+'</span><span class="dd">'+dd+'</span></td>'+
+      // 2 teintes distinctes et cumulables : « we » (week-end) et « nc » (jour non coché).
+      // Un jour à la fois week-end ET non coché reçoit les deux classes ; le CSS impose
+      // le gris « non coché » (plus soutenu) par-dessus, pour rester lisible comme non coché.
+      var cls=(we?' we':'')+(coche?'':' nc');
+      html+='<tr'+(cls?' class="'+cls.slice(1)+'"':'')+'>'+
         '<td class="center pt-box"><span class="pbox'+(j.am?' on':'')+'"></span></td>'+
         '<td class="center pt-box"><span class="pbox'+(j.pm?' on':'')+'"></span></td>'+
-        '<td class="pt-act">'+(j.am||j.pm?actEsc:'')+'</td></tr>';
+        '<td class="pt-date"><span class="dn">'+JOURS_COURTS[wd]+'</span><span class="dd">'+dd+'</span></td>'+
+        '<td class="pt-act">'+(coche?actEsc:'')+'</td></tr>';
     }
     pdfBody.innerHTML=html;
   }
@@ -894,12 +1168,18 @@
   /* ============================================================
      TOTAL + ESTIMATION + COMPTEUR
   ============================================================ */
+  // Total en jours dérivé de la seule source de vérité (state.days).
+  function totalJours(){ var demi=0; for(var d in state.days){ var j=state.days[d]; if(j.am) demi++; if(j.pm) demi++; } return demi*0.5; }
   function recalculer(){
-    var demi=0;
-    for(var d in state.days){ var j=state.days[d]; if(j.am) demi++; if(j.pm) demi++; }
-    var total=demi*0.5, txt=fmt(total);
-    if(totalNum.textContent!==txt){ totalNum.textContent=txt; totalNum.classList.remove('pulse'); void totalNum.offsetWidth; totalNum.classList.add('pulse'); }
-    calCount.textContent=txt+' j';
+    var total=totalJours(), txt=fmt(total);
+    if(totalNum.textContent!==txt){
+      totalNum.textContent=txt; totalNum.classList.remove('pulse'); void totalNum.offsetWidth; totalNum.classList.add('pulse');
+      annoncer(txt+' '+(total>1?'jours cochés':'jour coché'));
+    }
+    // Compteur de la carte de synthèse (déclencheur de la pop-up) — dérivé du même total.
+    if(synthDays) synthDays.textContent=txt+' j';
+    if(printTotalNum) printTotalNum.textContent=txt;                          // total du PDF, dérivé du même calcul
+    if(synthSub) synthSub.dataset.empty=(total===0)?'1':'';
     majEstimation(total);
   }
   function majEstimation(jours){
@@ -942,17 +1222,50 @@
       if(we){ var j=state.days[d]; if(j){ j.am=false; j.pm=false; nettoyerJour(d); } }
       else { var k=assurerJour(d); k.am=true; k.pm=true; }
     }
-    construireGrille(); saveSoon();
+    construireGrille(); saveSoon(); annoncer('Jours ouvrés cochés — '+fmt(totalJours())+' jours');
   }
   function toutDecocher(){
     for(var d in state.days){ state.days[d].am=false; state.days[d].pm=false; nettoyerJour(d); }
-    construireGrille(); saveSoon();
+    construireGrille(); saveSoon(); annoncer('Calendrier vidé');
   }
   function appliquerActivite(){
-    var v=defAct.value.trim(); if(!v){ defAct.focus(); return; }
-    for(var d in state.days){ var j=state.days[d]; if(j.am||j.pm) j.act=v; }
-    construireGrille(); saveSoon();
+    var v=defAct.value.trim(); if(!v){ defAct.focus(); annoncer('Saisissez une activité à appliquer'); return; }
+    var n=0;
+    for(var d in state.days){ var j=state.days[d]; if(j.am||j.pm){ j.act=v; n++; } }
+    construireGrille(); saveSoon(); annoncer(n?('Activité appliquée à '+n+' '+(n>1?'jours':'jour')):'Aucun jour coché où appliquer l’activité');
   }
+
+  /* ============================================================
+     MODÈLES D'ACTIVITÉ (presets) — dérivent de state.presets
+        Une puce remplit defAct ; « + » enregistre defAct comme modèle ;
+        la croix retire une puce. Aucun innerHTML avec texte utilisateur.
+  ============================================================ */
+  var presetListEl=document.getElementById('presetList'), presetEmptyEl=document.getElementById('presetEmpty');
+  function rendrePresets(){
+    if(!presetListEl) return;
+    presetListEl.textContent='';
+    var vide=!state.presets.length;
+    if(presetEmptyEl) presetEmptyEl.classList.toggle('hide', !vide);
+    state.presets.forEach(function(txt, i){
+      var chip=document.createElement('span'); chip.className='preset-chip';
+      var fill=document.createElement('button'); fill.type='button'; fill.className='preset-fill';
+      fill.textContent=txt; fill.title='Utiliser : '+txt;
+      fill.setAttribute('aria-label','Utiliser le modèle : '+txt);
+      fill.addEventListener('click', function(){ defAct.value=txt; defAct.focus(); annoncer('Modèle inséré : '+txt); });
+      var del=document.createElement('button'); del.type='button'; del.className='preset-del';
+      del.setAttribute('aria-label','Supprimer le modèle : '+txt);
+      del.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+      del.addEventListener('click', function(){ state.presets.splice(i,1); rendrePresets(); saveSoon(); annoncer('Modèle supprimé'); });
+      chip.appendChild(fill); chip.appendChild(del); presetListEl.appendChild(chip);
+    });
+  }
+  function ajouterPreset(){
+    var v=defAct.value.trim();
+    if(!v){ defAct.focus(); annoncer('Saisissez une activité avant de créer un modèle'); return; }
+    if(state.presets.indexOf(v)!==-1){ annoncer('Ce modèle existe déjà'); return; }
+    state.presets.push(v); rendrePresets(); saveSoon(); annoncer('Modèle enregistré');
+  }
+  document.getElementById('presetAdd').addEventListener('click', ajouterPreset);
 
   /* ============================================================
      INTERACTIONS GRILLE (délégation d'événements)
@@ -997,7 +1310,7 @@
       return;
     }
     var tap=e.target.closest('.cell-tap');                      // corps vide de la cellule → fiche du jour
-    if(tap){ ouvrirFiche(tap.closest('.cell').dataset.d); }
+    if(tap){ ouvrirFiche(tap.closest('.cell').dataset.d, tap); }
   });
   grid.addEventListener('input', function(e){
     var act=e.target.closest('.cell-act'); if(!act) return;
@@ -1021,16 +1334,23 @@
   }
   function majFiche(){
     var j=jour(jourCourant), pleine=j.am&&j.pm;
-    daySheet.querySelector('[data-slot="am"]').classList.toggle('on', j.am);
-    daySheet.querySelector('[data-slot="pm"]').classList.toggle('on', j.pm);
+    var segAm=daySheet.querySelector('[data-slot="am"]'), segPm=daySheet.querySelector('[data-slot="pm"]');
+    segAm.classList.toggle('on', j.am); segAm.setAttribute('aria-pressed', j.am);
+    segPm.classList.toggle('on', j.pm); segPm.setAttribute('aria-pressed', j.pm);
     daySheetFull.classList.toggle('on', pleine); daySheetFull.setAttribute('aria-pressed', pleine);
     if(document.activeElement!==daySheetAct) daySheetAct.value=j.act||'';
   }
-  function ouvrirFiche(d){
+  var relacherFiche=null;
+  function ouvrirFiche(d, declencheur){
     jourCourant=d; daySheetTitle.textContent=libelleJour(d); majFiche();
     daySheet.classList.add('open'); dayOverlay.classList.add('open'); daySheet.setAttribute('aria-hidden','false');
+    relacherFiche=gererModale(daySheet, declencheur||null, daySheetTitle);
   }
-  function fermerFiche(){ daySheet.classList.remove('open'); dayOverlay.classList.remove('open'); daySheet.setAttribute('aria-hidden','true'); jourCourant=null; }
+  function fermerFiche(){
+    if(!daySheet.classList.contains('open')) return;
+    daySheet.classList.remove('open'); dayOverlay.classList.remove('open'); daySheet.setAttribute('aria-hidden','true'); jourCourant=null;
+    if(relacherFiche){ relacherFiche(); relacherFiche=null; }
+  }
   daySheet.querySelectorAll('.seg-btn').forEach(function(b){
     b.addEventListener('click', function(){ if(jourCourant==null) return; var t=b.dataset.slot; definirCreneau(jourCourant, t, !estActif(jourCourant,t)); majFiche(); buzz(); });
   });
@@ -1054,23 +1374,70 @@
   /* ============================================================
      PERSONNALISATION (accent, icône, logo, motif)
   ============================================================ */
-  function luminance(hex){ var c=hex.replace('#',''); if(c.length===3)c=c.split('').map(function(x){return x+x;}).join(''); var r=parseInt(c.substr(0,2),16)/255,g=parseInt(c.substr(2,2),16)/255,b=parseInt(c.substr(4,2),16)/255; function f(v){return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4);} return 0.2126*f(r)+0.7152*f(g)+0.0722*f(b); }
+  // Composantes RVB [0..1] d'un hex (#rgb ou #rrggbb).
+  function rgbCanaux(hex){ var c=hex.replace('#',''); if(c.length===3)c=c.split('').map(function(x){return x+x;}).join(''); return [parseInt(c.substr(0,2),16)/255,parseInt(c.substr(2,2),16)/255,parseInt(c.substr(4,2),16)/255]; }
+  function luminance(hex){ var v=rgbCanaux(hex); function f(x){return x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4);} return 0.2126*f(v[0])+0.7152*f(v[1])+0.0722*f(v[2]); }
+  // Contraste WCAG entre deux luminances.
+  function contraste(l1,l2){ return (Math.max(l1,l2)+0.05)/(Math.min(l1,l2)+0.05); }
+  // Encre sur l'accent (WCAG 1.4.3/1.4.11) : on choisit noir chaud OU blanc selon
+  // le MEILLEUR contraste, mesuré sur toute la surface du dégradé (base + haut
+  // éclairci de 16 % comme --accent-top). Corrige le défaut du seuil de luminance
+  // qui posait du blanc illisible sur l'ambre par défaut (2,2:1 → 7,8:1).
+  function encreSurAccent(hex){
+    var v=rgbCanaux(hex);
+    var haut=[v[0]+(1-v[0])*0.16, v[1]+(1-v[1])*0.16, v[2]+(1-v[2])*0.16];  // ≈ --accent-top
+    function lum(c){ function f(x){return x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4);} return 0.2126*f(c[0])+0.7152*f(c[1])+0.0722*f(c[2]); }
+    var lBase=lum(v), lHaut=lum(haut);
+    var lFonce=luminance('#241a00'), lClair=1.0;
+    var minFonce=Math.min(contraste(lFonce,lBase),contraste(lFonce,lHaut));
+    var minClair=Math.min(contraste(lClair,lBase),contraste(lClair,lHaut));
+    return minFonce>=minClair?'#241a00':'#ffffff';
+  }
   function appliquerAccent(hex,persist){
+    hex=accentValide(hex);                       // n'accepte qu'un vrai code couleur (défaut sinon)
     state.accent=hex;
     document.documentElement.style.setProperty('--accent',hex);
-    document.documentElement.style.setProperty('--on-accent', luminance(hex)>0.55?'#241a00':'#ffffff');
+    document.documentElement.style.setProperty('--on-accent', encreSurAccent(hex));
     var p=document.getElementById('accentPicker'); if(p&&hex.length===7) p.value=hex;
     document.querySelectorAll('.swatch-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.c.toLowerCase()===hex.toLowerCase()); });
     if(persist!==false) saveSoon();
   }
+  // Un dataURL image est-il légitime ? N'accepte QUE data:image/<type>,… (types bitmap ou SVG).
+  // Barrière contre l'injection : un logo importé/restauré non conforme (ex. HTML piégé) est rejeté,
+  // jamais inséré. Rejette aussi tout ce qui n'est pas une chaîne.
+  var RE_IMG_DATAURL=/^data:image\/(png|jpe?g|gif|webp|svg\+xml|bmp|x-icon|vnd\.microsoft\.icon);/i;
+  function estImageDataUrl(v){ return typeof v==='string' && v.length<5e6 && RE_IMG_DATAURL.test(v); }
+  // Clé d'icône de marque valide (présente dans MARKS), sinon défaut 'hex'.
+  function markValide(id){ return (typeof id==='string' && Object.prototype.hasOwnProperty.call(MARKS,id))?id:'hex'; }
+  // Couleur d'accent : #rgb ou #rrggbb seulement. Toute autre valeur retombe sur le défaut.
+  var RE_HEX=/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+  function accentValide(v){ return (typeof v==='string' && RE_HEX.test(v))?v:'#E2A400'; }
+  // Signatures : objet {left,right} où chaque branche est un dataURL image valide ou null.
+  // Un canvas dessine puis affiche <img> depuis ces valeurs → filtrer bloque toute charge hostile.
+  function sigValide(s){
+    if(!s||typeof s!=='object'||Array.isArray(s)) return {left:null,right:null};
+    return { left:estImageDataUrl(s.left)?s.left:null, right:estImageDataUrl(s.right)?s.right:null };
+  }
   function rendreIcones(){
-    var html=state.logo?'<img src="'+state.logo+'" alt="">':MARKS[state.mark];
-    document.getElementById('markTop').innerHTML=html; document.getElementById('markDoc').innerHTML=html;
-    document.querySelectorAll('.mark-btn').forEach(function(b){ b.classList.toggle('active', !state.logo&&b.dataset.m===state.mark); });
+    // Logo utilisateur (dataURL, potentiellement non fiable) rejeté s'il n'est pas une image valide.
+    var logoOk=estImageDataUrl(state.logo);
+    if(!logoOk && state.logo){ state.logo=null; }              // neutralise une valeur hostile persistée/importée
+    var mark=markValide(state.mark);
+    // Rendu SANS innerHTML pour le logo : l'<img> est construit par l'API DOM, .src ne peut pas
+    // sortir de l'attribut (pas d'injection). innerHTML n'est utilisé que pour le SVG statique MARKS.
+    ['markTop','markDoc'].forEach(function(id){
+      var slot=document.getElementById(id); if(!slot) return;
+      slot.textContent='';
+      if(logoOk){ var im=document.createElement('img'); im.src=state.logo; im.alt=''; slot.appendChild(im); }
+      else { slot.innerHTML=MARKS[mark]; }                     // MARKS = constantes SVG figées, non altérables
+    });
+    document.querySelectorAll('.mark-btn').forEach(function(b){ b.classList.toggle('active', !logoOk&&b.dataset.m===mark); });
     var lp=document.getElementById('logoPreview');
-    if(state.logo){ lp.src=state.logo; lp.classList.add('show'); } else { lp.classList.remove('show'); lp.removeAttribute('src'); }
+    if(logoOk){ lp.src=state.logo; lp.classList.add('show'); } else { lp.classList.remove('show'); lp.removeAttribute('src'); }
   }
   function appliquerMotif(on){ state.motif=!!on; document.body.classList.toggle('no-motif',!on); document.getElementById('motifToggle').checked=!!on; }
+  // Mention « provisoire » : dérive body.provisoire (écran badge + filigrane PDF, même état).
+  function appliquerProvisoire(on){ state.provisoire=!!on; document.body.classList.toggle('provisoire',!!on); document.getElementById('provToggle').checked=!!on; }
   (function construireUIPerso(){
     var sw=document.getElementById('swatches');
     SWATCHES.forEach(function(c){ var b=document.createElement('button'); b.className='swatch-btn'; b.type='button'; b.dataset.c=c; b.style.background=c; b.setAttribute('aria-label','Couleur '+c); b.addEventListener('click',function(){ appliquerAccent(c); }); sw.appendChild(b); });
@@ -1081,22 +1448,186 @@
   document.getElementById('logoFile').addEventListener('change', function(e){ var f=e.target.files&&e.target.files[0]; if(!f) return; var r=new FileReader(); r.onload=function(ev){ state.logo=ev.target.result; rendreIcones(); saveSoon(); }; r.readAsDataURL(f); e.target.value=''; });
   document.getElementById('logoRemove').addEventListener('click', function(){ state.logo=null; rendreIcones(); saveSoon(); });
   document.getElementById('motifToggle').addEventListener('change', function(e){ appliquerMotif(e.target.checked); saveSoon(); });
+  document.getElementById('provToggle').addEventListener('change', function(e){ appliquerProvisoire(e.target.checked); saveSoon(); annoncer(e.target.checked?'CRA marqué provisoire':'Mention provisoire retirée'); });
 
   /* ============================================================
-     TIROIR + CALENDRIER PLEIN ÉCRAN (mobile)
+     TIROIR DE PERSONNALISATION + POP-UP CALENDRIER
+        Le calendrier est TOUJOURS une modale (pop-up) : plein écran
+        sous 700px, boîte centrée au-dessus d'un voile au-delà. Ouverture
+        et fermeture passent par gererModale() (focus déplacé + piégé +
+        Escape + focus rendu au déclencheur), comme le tiroir et la fiche.
   ============================================================ */
-  var drawer=document.getElementById('drawer'), overlay=document.getElementById('overlay'), calPanel=document.getElementById('calPanel');
-  function ouvrirTiroir(){ drawer.classList.add('open'); overlay.classList.add('open'); drawer.setAttribute('aria-hidden','false'); }
-  function fermerTiroir(){ drawer.classList.remove('open'); overlay.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); }
-  function ouvrirCal(){ calPanel.classList.add('open'); document.body.classList.add('cal-open'); }
-  function fermerCal(){ calPanel.classList.remove('open'); document.body.classList.remove('cal-open'); }
+  var drawer=document.getElementById('drawer'), overlay=document.getElementById('overlay'), calPanel=document.getElementById('calPanel'), calOverlay=document.getElementById('calOverlay');
+  var relacherTiroir=null, relacherCal=null;
+  var drawerTitre=drawer.querySelector('.drawer-head h2');
+  var calTitre=calPanel.querySelector('.cal-modal-head .cal-title');
+  function ouvrirTiroir(){
+    drawer.classList.add('open'); overlay.classList.add('open'); drawer.setAttribute('aria-hidden','false');
+    relacherTiroir=gererModale(drawer, null, drawerTitre);
+  }
+  function fermerTiroir(){
+    if(!drawer.classList.contains('open')) return;
+    drawer.classList.remove('open'); overlay.classList.remove('open'); drawer.setAttribute('aria-hidden','true');
+    if(relacherTiroir){ relacherTiroir(); relacherTiroir=null; }
+  }
+  function ouvrirCal(){
+    calPanel.classList.add('open'); calOverlay.classList.add('open'); document.body.classList.add('cal-open');
+    calPanel.setAttribute('role','dialog'); calPanel.setAttribute('aria-modal','true'); calPanel.setAttribute('aria-labelledby','calMobileTitle'); calPanel.setAttribute('aria-hidden','false');
+    relacherCal=gererModale(calPanel, null, calTitre);
+  }
+  function fermerCal(){
+    if(!calPanel.classList.contains('open')) return;
+    calPanel.classList.remove('open'); calOverlay.classList.remove('open'); document.body.classList.remove('cal-open');
+    calPanel.removeAttribute('role'); calPanel.removeAttribute('aria-modal'); calPanel.removeAttribute('aria-labelledby'); calPanel.setAttribute('aria-hidden','true');
+    if(relacherCal){ relacherCal(); relacherCal=null; }
+  }
   document.getElementById('openSettings').addEventListener('click', ouvrirTiroir);
   document.getElementById('closeSettings').addEventListener('click', fermerTiroir);
   overlay.addEventListener('click', fermerTiroir);
   document.getElementById('openCal').addEventListener('click', ouvrirCal);
   document.getElementById('closeCal').addEventListener('click', fermerCal);
-  document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ fermerTiroir(); fermerCal(); fermerFiche(); } });
+  calOverlay.addEventListener('click', fermerCal);
+  // Escape ferme UNIQUEMENT la surface modale la plus haute (WCAG 2.1.2 / 2.4.3) : la fiche du
+  // jour peut être empilée au-dessus du calendrier. Tout fermer d'un coup renverrait le focus sur
+  // un élément du panneau sous-jacent devenu aria-hidden → focus perdu. On ferme donc du plus
+  // haut au plus bas et on s'arrête à la première surface effectivement fermée.
+  document.addEventListener('keydown', function(e){
+    if(e.key!=='Escape') return;
+    if(daySheet.classList.contains('open')){ fermerFiche(); return; }
+    if(calPanel.classList.contains('open')){ fermerCal(); return; }
+    if(drawer.classList.contains('open')){ fermerTiroir(); return; }
+  });
   document.getElementById('clearData').addEventListener('click', function(){ if(!confirm('Effacer toutes les données enregistrées sur cet appareil ?')) return; if(LS){ try{ LS.removeItem(STORE_KEY); }catch(e){} } location.reload(); });
+
+  /* ============================================================
+     EXPORT / IMPORT DU CRA EN .json (100 % hors-ligne)
+        Export : sérialise directement le state (même contrat que la
+        persistance) via Blob + URL.createObjectURL + <a download>.
+        Import : FileReader + JSON.parse (try/catch), validation
+        défensive, confirmation avant écrasement, ré-hydratation par
+        le même chemin que restaurer() (appliquerEtat). Fichier traité
+        comme non fiable : aucun innerHTML, passage par les setters.
+  ============================================================ */
+  function nomFichierExport(){
+    var base=(document.title||'CRA').replace(/[^\wÀ-ſ]+/g,'_').replace(/^_+|_+$/g,'')||'CRA';
+    return base+'.json';
+  }
+  function exporterJson(){
+    try{
+      var data=JSON.stringify(state, null, 2);
+      var blob=new Blob([data], {type:'application/json'});
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement('a'); a.href=url; a.download=nomFichierExport();
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+      annoncer('CRA exporté en fichier JSON');
+    }catch(e){ alert('Export impossible sur ce navigateur.'); }
+  }
+  // Vrai si l'objet importé ressemble à un état de CRA valide.
+  function etatPlausible(o){
+    if(!o||typeof o!=='object'||Array.isArray(o)) return false;
+    // Au moins une clé structurante attendue, et days doit être un objet si présent.
+    if(o.days!=null && (typeof o.days!=='object'||Array.isArray(o.days))) return false;
+    if(o.fields!=null && (typeof o.fields!=='object'||Array.isArray(o.fields))) return false;
+    return ('days' in o)||('fields' in o)||('sig' in o)||('accent' in o);
+  }
+  function importerJson(file){
+    var r=new FileReader();
+    r.onload=function(ev){
+      var obj=null;
+      try{ obj=JSON.parse(ev.target.result); }
+      catch(err){ alert('Fichier illisible : ce n’est pas un JSON valide.'); annoncer('Import échoué — fichier invalide'); return; }
+      if(!etatPlausible(obj)){ alert('Ce fichier ne correspond pas à un CRA exporté.'); annoncer('Import échoué — format non reconnu'); return; }
+      if(moisNonVide() || Object.keys(state.archive||{}).length){
+        if(!confirm('Importer remplacera votre CRA en cours (mois affiché, archive et modèles). Continuer ?')) return;
+      }
+      try{
+        appliquerEtat(obj);       // ré-hydratation défensive (mêmes setters que restaurer)
+        rafraichirTout();
+        var ok=save();            // persiste l'état importé et met à jour le témoin
+        annoncer(ok?'CRA importé et enregistré':'CRA importé (non enregistré localement)');
+      }catch(e){ alert('Import interrompu : données incompatibles.'); }
+    };
+    r.onerror=function(){ alert('Lecture du fichier impossible.'); };
+    r.readAsText(file);
+  }
+  document.getElementById('exportData').addEventListener('click', exporterJson);
+  document.getElementById('importFile').addEventListener('change', function(e){ var f=e.target.files&&e.target.files[0]; if(f) importerJson(f); e.target.value=''; });
+
+  /* ============================================================
+     PROFILS D'IDENTITÉ (clé localStorage séparée cra_profiles_v1)
+        Un profil = instantané des champs DÉJÀ paramétrables
+        (fields, accent, mark, logo, motif, tjm, charges). Jamais
+        days / sig / month / year. Appliquer = écrire dans state +
+        rappeler les setters existants. Aucun profil pré-livré.
+        Libellés via textContent uniquement.
+  ============================================================ */
+  var profils=chargerProfils();
+  var profListEl=document.getElementById('profList'), profEmptyEl=document.getElementById('profEmpty'), profNameEl=document.getElementById('profName');
+  function instantaneProfil(){
+    return {
+      fields:JSON.parse(JSON.stringify(state.fields||{})),
+      accent:state.accent, mark:state.mark, logo:state.logo,
+      motif:state.motif, tjm:state.tjm, charges:state.charges
+    };
+  }
+  function appliquerProfil(p){
+    if(!p) return;
+    var d=p.data||{};
+    // Champs texte (hors calendrier / signatures) : on fusionne sans toucher days/sig.
+    state.fields=Object.assign({}, state.fields, d.fields||{});
+    document.querySelectorAll('[data-k]').forEach(function(el){
+      if(el.tagName==='INPUT'&&el.type!=='file'&&el.type!=='color'&&el.type!=='checkbox'){
+        if(state.fields[el.dataset.k]!=null) el.value=state.fields[el.dataset.k];
+      }
+    });
+    if(d.fields&&d.fields.docTitle!=null) docTitleEl.value=d.fields.docTitle;
+    if(d.fields&&d.fields.comment!=null) commentEl.innerText=d.fields.comment;
+    // Icône/logo issus d'un profil (clé localStorage séparée, potentiellement falsifiée) : filtrés.
+    state.mark=markValide(d.mark); state.logo=estImageDataUrl(d.logo)?d.logo:null;
+    state.tjm=(d.tjm!=null)?d.tjm:''; state.charges=(d.charges!=null)?d.charges:'';
+    tjmInput.value=state.tjm; chargesInput.value=state.charges;
+    appliquerMotif(d.motif!==false);
+    appliquerAccent(d.accent||'#E2A400', false);
+    rendreIcones(); majNoTitle(); majNoComment();
+    recalculer(); syncNomFichier(); rafraichirPrint(); saveSoon();
+    annoncer('Profil « '+(p.name||'')+' » appliqué');
+  }
+  function rendreProfils(){
+    if(!profListEl) return;
+    profListEl.textContent='';
+    if(profEmptyEl) profEmptyEl.classList.toggle('hide', profils.length>0);
+    profils.forEach(function(p, i){
+      var item=document.createElement('div'); item.className='prof-item';
+      var name=document.createElement('span'); name.className='pi-name'; name.textContent=p.name; name.title=p.name;
+      var acts=document.createElement('div'); acts.className='pi-actions';
+      var apply=document.createElement('button'); apply.type='button'; apply.className='btn small'; apply.textContent='Appliquer';
+      apply.setAttribute('aria-label','Appliquer le profil '+p.name);
+      apply.addEventListener('click', function(){ appliquerProfil(p); });
+      var del=document.createElement('button'); del.type='button'; del.className='btn small ghost danger'; del.textContent='Supprimer';
+      del.setAttribute('aria-label','Supprimer le profil '+p.name);
+      del.addEventListener('click', function(){
+        if(!confirm('Supprimer le profil « '+p.name+' » ?')) return;
+        profils.splice(i,1); enregistrerProfils(profils); rendreProfils(); annoncer('Profil supprimé');
+      });
+      acts.appendChild(apply); acts.appendChild(del);
+      item.appendChild(name); item.appendChild(acts); profListEl.appendChild(item);
+    });
+  }
+  function enregistrerProfilCourant(){
+    var nom=(profNameEl.value||'').trim();
+    if(!nom){ profNameEl.focus(); annoncer('Nommez le profil avant d’enregistrer'); return; }
+    var existant=-1;
+    for(var i=0;i<profils.length;i++){ if(profils[i].name.toLowerCase()===nom.toLowerCase()){ existant=i; break; } }
+    if(existant!==-1 && !confirm('Un profil « '+nom+' » existe déjà. Le remplacer ?')) return;
+    var entree={ name:nom, data:instantaneProfil() };
+    if(existant!==-1) profils[existant]=entree; else profils.push(entree);
+    var ok=enregistrerProfils(profils); rendreProfils(); profNameEl.value='';
+    annoncer(ok?('Profil « '+nom+' » enregistré'):'Enregistrement du profil impossible (stockage local)');
+  }
+  document.getElementById('profSave').addEventListener('click', enregistrerProfilCourant);
+  profNameEl.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); enregistrerProfilCourant(); } });
+  rendreProfils();
 
   /* ============================================================
      SIGNATURES (dessin + import + glisser-déposer)
@@ -1111,7 +1642,7 @@
     function fin(){ if(!dessine) return; dessine=false; persister(); }
     canvas.addEventListener('pointerdown',debut); canvas.addEventListener('pointermove',bouge); window.addEventListener('pointerup',fin);
     function persister(){ try{ state.sig[key]=canvas.toDataURL('image/png'); saveSoon(); }catch(e){} }
-    function effacer(){ ctx.clearRect(0,0,canvas.width,canvas.height); zone.classList.remove('has-ink'); state.sig[key]=null; saveSoon(); }
+    function effacer(silencieux){ ctx.clearRect(0,0,canvas.width,canvas.height); zone.classList.remove('has-ink'); state.sig[key]=null; if(silencieux!==true) saveSoon(); }
     function dessinerImage(src,persistIt){ var img=new Image(); img.onload=function(){ ctx.clearRect(0,0,canvas.width,canvas.height); var s=Math.min(canvas.width/img.width,canvas.height/img.height); var w=img.width*s,h=img.height*s; ctx.drawImage(img,(canvas.width-w)/2,(canvas.height-h)/2,w,h); zone.classList.add('has-ink'); if(persistIt) persister(); }; img.src=src; }
     var card=zone.closest('.sign-card');
     card.querySelector('.sig-file').addEventListener('change', function(e){ var f=e.target.files&&e.target.files[0]; if(!f) return; var r=new FileReader(); r.onload=function(ev){ dessinerImage(ev.target.result,true); }; r.readAsDataURL(f); e.target.value=''; });
@@ -1119,7 +1650,7 @@
     ['dragenter','dragover'].forEach(function(ev){ zone.addEventListener(ev,function(e){ e.preventDefault(); zone.classList.add('dragover'); }); });
     ['dragleave','drop'].forEach(function(ev){ zone.addEventListener(ev,function(e){ e.preventDefault(); zone.classList.remove('dragover'); }); });
     zone.addEventListener('drop', function(e){ var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]; if(f&&/^image\//.test(f.type)){ var r=new FileReader(); r.onload=function(ev){ dessinerImage(ev.target.result,true); }; r.readAsDataURL(f); } });
-    return { restore:function(src){ if(src) dessinerImage(src,false); } };
+    return { restore:function(src){ if(src) dessinerImage(src,false); }, effacer:effacer };
   }
   var pads={}; document.querySelectorAll('.sign-zone').forEach(function(z){ pads[z.dataset.key]=initSignPad(z); });
 
@@ -1185,9 +1716,25 @@
         Changer de mois/année réinitialise le calendrier (un CRA
         par mois) et reconstruit la grille depuis l'état vide.
   ============================================================ */
+  // Clé d'archive d'une période : 'AAAA-MM' (mois sur 2 chiffres).
+  function cleArchive(y,m){ return y+'-'+(m<9?'0'+(m+1):(m+1)); }
+  // Le mois courant contient-il au moins une demi-journée cochée ?
+  function moisNonVide(){ for(var d in state.days){ var j=state.days[d]; if(j.am||j.pm) return true; } return false; }
+  // Sérialise le mois affiché dans l'archive (sans muter la source vivante) s'il a du contenu.
+  function archiverMoisCourant(){
+    if(state.month==null||state.year==null) return;
+    var k=cleArchive(state.year, state.month);
+    if(moisNonVide()){ state.archive[k]={ days:JSON.parse(JSON.stringify(state.days)) }; }
+    else if(state.archive[k]){ delete state.archive[k]; }   // mois vidé → on nettoie l'entrée
+  }
   function changerPeriode(){
-    state.days={}; state.month=parseInt(monthSel.value,10); state.year=parseInt(yearSel.value,10);
+    archiverMoisCourant();                                  // ne détruit plus le mois précédent
+    var m=parseInt(monthSel.value,10), y=parseInt(yearSel.value,10);
+    var k=cleArchive(y,m), ar=state.archive[k];
+    state.days=(ar&&ar.days)?JSON.parse(JSON.stringify(ar.days)):{};   // restaure depuis l'archive si présente
+    state.month=m; state.year=y;
     construireGrille(); construireTableauPdf(); syncNomFichier(); syncTitreCal(); saveSoon();
+    annoncer(MOIS[m]+' '+y+(ar&&ar.days?' — mois restauré ('+fmt(totalJours())+' j)':' — nouveau mois'));
   }
   monthSel.addEventListener('change', changerPeriode);
   yearSel.addEventListener('change', changerPeriode);
@@ -1198,31 +1745,60 @@
   defAct.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); appliquerActivite(); } });
 
   /* ============================================================
-     RESTAURATION (reprise du brouillon enregistré localement)
+     RÉ-HYDRATATION DE L'ÉTAT (chemin partagé restauration / import)
+        Un seul point d'entrée pour reconstruire l'UI à partir d'un
+        objet state (brouillon local OU fichier .json importé). Toute
+        clé absente reçoit un défaut sensé → rétrocompatible avec les
+        anciens brouillons cra_app_v3 (sans presets/archive).
   ============================================================ */
+  function appliquerEtat(s){
+    s=s||{};
+    // Champs texte : consommés uniquement via .value / .innerText (jamais innerHTML) → sûrs tels quels.
+    state.fields=(s.fields&&typeof s.fields==='object'&&!Array.isArray(s.fields))?s.fields:{};
+    // Icône/logo/signatures potentiellement hostiles (fichier importé, localStorage falsifié) : filtrés à l'entrée.
+    state.mark=markValide(s.mark);
+    state.logo=estImageDataUrl(s.logo)?s.logo:null;
+    state.motif=(s.motif!==false);
+    state.tjm=s.tjm||''; state.charges=s.charges||'';
+    state.sig=sigValide(s.sig); state.days=s.days||{};
+    state.presets=Array.isArray(s.presets)?s.presets.slice():[];
+    state.archive=(s.archive&&typeof s.archive==='object')?s.archive:{};
+    if(s.month!=null){ monthSel.value=s.month; state.month=parseInt(s.month,10); } else { state.month=parseInt(monthSel.value,10); }
+    if(s.year!=null){ yearSel.value=s.year; state.year=parseInt(s.year,10); } else { state.year=parseInt(yearSel.value,10); }
+    document.querySelectorAll('[data-k]').forEach(function(el){
+      if(el.tagName==='INPUT'&&el.type!=='file'&&el.type!=='color'&&el.type!=='checkbox'){
+        el.value=(state.fields[el.dataset.k]!=null)?state.fields[el.dataset.k]:'';
+      }
+    });
+    tjmInput.value=state.tjm; chargesInput.value=state.charges;
+    docTitleEl.value=(state.fields.docTitle!=null)?state.fields.docTitle:'';
+    commentEl.innerText=(state.fields.comment!=null)?state.fields.comment:'';
+    appliquerAccent(s.accent||'#E2A400', false); appliquerMotif(state.motif); appliquerProvisoire(s.provisoire===true); rendreIcones();
+    // Signatures : on repart d'un canvas propre puis on restaure celles présentes.
+    // effacer() remet state.sig[key]=null ; on capture donc les sources AVANT d'effacer,
+    // sinon restore() ne recevrait plus rien (le canvas resterait vide après import/restauration).
+    var sigL=state.sig.left, sigR=state.sig.right;
+    pads.left.effacer(true); pads.right.effacer(true);
+    if(sigL) pads.left.restore(sigL);
+    if(sigR) pads.right.restore(sigR);
+    state.sig.left=sigL; state.sig.right=sigR;   // restore() ne réécrit pas state.sig ; on rétablit la source de vérité
+    rendrePresets();
+  }
+  // Reconstruit toutes les vues dérivées après une ré-hydratation complète.
+  function rafraichirTout(){
+    construireGrille(); construireTableauPdf(); recalculer(); rafraichirPrint();
+    syncNomFichier(); syncTitreCal();
+  }
+
   (function restaurer(){
     construireSemaine();                       // en-têtes Lun → Dim
     var s=load();
-    if(s){
-      state.fields=s.fields||{}; state.mark=s.mark||'hex'; state.logo=s.logo||null; state.motif=(s.motif!==false);
-      state.tjm=s.tjm||''; state.charges=s.charges||''; state.sig=s.sig||{left:null,right:null}; state.days=s.days||{};
-      if(s.month!=null){ monthSel.value=s.month; state.month=s.month; }
-      if(s.year!=null){ yearSel.value=s.year; state.year=s.year; }
-      document.querySelectorAll('[data-k]').forEach(function(el){
-        if(el.tagName==='INPUT'&&el.type!=='file'&&el.type!=='color'&&el.type!=='checkbox'){
-          if(state.fields[el.dataset.k]!=null) el.value=state.fields[el.dataset.k];
-        }
-      });
-      tjmInput.value=state.tjm; chargesInput.value=state.charges;
-      if(state.fields.docTitle!=null) docTitleEl.value=state.fields.docTitle;
-      if(state.fields.comment!=null) commentEl.innerText=state.fields.comment;
-      appliquerAccent(s.accent||'#E2A400', false); appliquerMotif(state.motif); rendreIcones();
-      if(state.sig.left) pads.left.restore(state.sig.left);
-      if(state.sig.right) pads.right.restore(state.sig.right);
-    } else {
+    if(s){ appliquerEtat(s); }
+    else {
       state.month=parseInt(monthSel.value,10); state.year=parseInt(yearSel.value,10);
-      appliquerAccent('#E2A400', false); appliquerMotif(true); rendreIcones();
+      appliquerAccent('#E2A400', false); appliquerMotif(true); appliquerProvisoire(false); rendreIcones(); rendrePresets();
     }
+    if(!LS){ setStatut('indispo'); }           // témoin persistant si stockage local absent
   })();
 
   /* ============================================================
