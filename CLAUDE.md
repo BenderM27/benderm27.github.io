@@ -105,17 +105,27 @@ Les dimensions du calendrier viennent de jetons recalculés par palier :
 `--cell-min`, `--slot-h`, `--num-size`, `--full-size`. **Ne pas figer ces
 tailles en pixels ailleurs** — ajuster le jeton au palier voulu.
 
-Paliers : `≤389` (petit téléphone), `≤560` (colonnes → 1), `≤699` (téléphone :
-calendrier en panneau plein écran glissant + fiche du jour en feuille basse),
-`700–899` (tablette / paysage : calendrier **en ligne**), `≥900` (bureau : 2
-colonnes, calées à la hauteur du viewport, pas de scroll global), `≥1280`,
-`≥1600` (ultra-large), + garde « paysage court ».
+Structure unifiée : le **calendrier vit dans une pop-up modale** (`#calPanel`,
+`role="dialog"`, focus géré par `gererModale()`), ouverte par une **carte
+déclencheur** (« Modifier le calendrier » + compteur de jours cochés dérivé de
+`recalculer()`). Le **contenu du document** (infos, estimation, commentaire,
+signatures, tableau PDF) occupe la **pleine largeur** : une colonne en mobile,
+**deux colonnes internes** (`.lay-grid`) sur grand écran. Une seule logique —
+pas de vue mobile/desktop séparée à maintenir.
+
+Paliers : `≤389` (petit téléphone, hexagone resserré), `≤560` (colonnes → 1),
+`≤699` (téléphone : pop-up calendrier plein écran glissant + fiche du jour en
+feuille basse), `≥1000` (contenu en 2 colonnes internes), `≥1280`, `≥1600`
+(ultra-large), + garde « paysage court ». **Zéro débordement horizontal** à
+tous les paliers (`scrollWidth ≤ innerWidth`), pop-up ouverte comme fermée.
 
 ### Impression / PDF
 Réagencement vers l'ordre document (infos → tableau liste → total → commentaire
 → signatures) en A4 portrait, avec **auto-fit** (zoom mesuré pour tenir sur une
 page). Le calendrier-grille est masqué à l'impression au profit du tableau
-liste (`.print-table`, généré depuis l'état).
+liste (`.print-table`, généré depuis l'état). Colonnes du tableau, de gauche à
+droite : **Matin · Après-midi · Date · Activité réalisée**. Les jours **non
+cochés** (`tr.nc`) sont grisés d'une teinte **distincte** du week-end (`tr.we`).
 
 ## 5. Interdits
 
