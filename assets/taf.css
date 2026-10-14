@@ -1,0 +1,480 @@
+/* ============================================================================
+   TAF — SOCLE VISUEL PARTAGÉ (assets/taf.css)
+   Chargé par CHAQUE page, avant le CSS de son module. Ne contient que le
+   générique : jetons, base, boutons, champs, barre supérieure + navigation
+   de modules, témoin de sauvegarde, interrupteur, voile, tiroir + section
+   « Apparence », toasts, état vide, animations communes, transitions
+   inter-pages, impression du « chrome ».
+   Aucune teinte d'accent en dur : tout passe par les jetons --accent* (la
+   couleur est personnalisable, cf. TAF.definirPrefs).
+   Sections :
+      1. Jetons                     8. Voile, tiroir, section Apparence
+      2. Base                    8 bis. Feuilles & dialogues
+      3. Boutons                    9. Toasts
+      4. Barre supérieure        9 bis. Hexagone tri-état (pastille)
+      5. Navigation de modules     10. État vide
+      6. Témoin de sauvegarde      11. Transitions inter-pages
+      7. Champs & interrupteur     12. Paliers responsive (socle)
+                                   13. Mouvement réduit
+                                   14. Impression (chrome)
+============================================================================ */
+
+/* ============================================================
+   1. JETONS DE DESIGN
+      Neutres chauds + accent (défaut : ambre ALVEOLEN). Variantes
+      d'accent dérivées par color-mix() → suivent l'accent choisi.
+============================================================ */
+:root{
+  color-scheme:light;
+
+  --accent:#E2A400; --on-accent:#241a00;
+  --accent-top: color-mix(in srgb, #ffffff 16%, var(--accent));
+  --accent-deep: color-mix(in srgb, var(--accent) 58%, #1a1200);
+  --accent-fill: color-mix(in srgb, var(--accent) 22%, #ffffff);
+  --accent-fill-2: color-mix(in srgb, var(--accent) 11%, #ffffff);
+  --accent-edge: color-mix(in srgb, var(--accent) 46%, #ffffff);
+  --accent-ring: color-mix(in srgb, var(--accent) 30%, transparent);
+
+  --ink:#15171C; --ink-soft:#3A4049; --muted:#697079; --faint:#A4AAB2;
+  --line:#ECEEF1; --line-2:#E0E3E8; --line-3:#CBD0D7; --line-4:#B7BEC7;
+
+  --canvas-top:#F6F6F4; --canvas:#ECEDEC; --paper:#FFFFFF; --paper-2:#FCFCFB;
+
+  /* États sémantiques (jamais l'accent) */
+  --danger:#C0392B; --danger-ink:#B23A1E; --danger-fill:#FFF6F4; --ok:#15A66B;
+
+  --radius:20px; --radius-md:14px; --radius-sm:11px; --r1:7px;
+
+  --shadow-soft:0 1px 2px rgba(16,18,24,.05);
+  --shadow-sheet:0 1px 0 rgba(16,18,24,.02), 0 2px 8px rgba(16,18,24,.045), 0 24px 60px -26px rgba(16,18,24,.22);
+  --shadow-pop:0 12px 44px -8px rgba(16,18,24,.32);
+
+  /* Halo de focus clavier (WCAG 2.2 SC 1.4.11) : l'anneau d'accent seul (ambre par
+     défaut) n'atteint que ~2,2:1 sur fond clair. Ce halo sombre translucide, posé en
+     box-shadow SOUS l'outline accent, garantit un indicateur ≥3:1 quel que soit
+     l'accent personnalisé, sans altérer la teinte de marque. */
+  --focus-halo:0 0 0 4.5px rgba(16,18,24,.55);
+
+  --font:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --ease:cubic-bezier(.22,.61,.27,1);
+
+  /* Gouttière latérale de page (≥12px partout) */
+  --gutter:clamp(12px, 3vw, 20px);
+  /* Hauteur de la barre d'onglets basse : 0 au-delà de 700px (voir section 12). */
+  --nav-h:0px;
+
+  /* Empilement — une seule échelle pour toutes les pages */
+  --z-page:1; --z-topbar:50; --z-overlay:60; --z-drawer:70; --z-modal:75;
+  --z-sheet-overlay:78; --z-sheet:80; --z-toast:90; --z-skip:100;
+}
+
+/* ============================================================
+   2. BASE
+============================================================ */
+*, *::before, *::after{ box-sizing:border-box; }
+[hidden]{ display:none !important; }
+html{ background:var(--canvas); -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+html, body{ margin:0; padding:0; }
+body{
+  min-height:100vh; min-height:100dvh;
+  font-family:var(--font); color:var(--ink); line-height:1.45;
+  /* Halo clair en haut de page. Pas de background-attachment:fixed : il forcerait un
+     repeint à chaque défilement (jank). Le halo est ancré en haut du document. */
+  background:radial-gradient(1200px 560px at 50% -80px, var(--canvas-top) 0%, var(--canvas) 64%) no-repeat, var(--canvas);
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; position:relative;
+}
+::selection{ background:var(--accent-fill); color:var(--ink); }
+
+/* Motif hexagone (signature de marque), très discret, désactivable (body.no-motif) */
+body::before, body::after{
+  content:""; position:fixed; z-index:0; pointer-events:none; opacity:.05;
+  background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='25,3 75,3 98,50 75,97 25,97 2,50' fill='none' stroke='%23000' stroke-width='1'/></svg>") no-repeat center/contain;
+}
+body::before{ width:540px; height:540px; top:-160px; right:-160px; transform:rotate(8deg); }
+body::after{ width:380px; height:380px; bottom:-130px; left:-130px; opacity:.04; transform:rotate(-12deg); }
+body.no-motif::before, body.no-motif::after{ display:none; }
+
+.sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+
+/* Lien d'évitement : invisible jusqu'au focus clavier */
+.skip-link{ position:fixed; left:12px; top:calc(env(safe-area-inset-top) + 8px); z-index:var(--z-skip); padding:10px 14px; border-radius:10px; background:var(--ink); color:#fff; font-weight:650; font-size:13.5px; text-decoration:none; transform:translateY(calc(-100% - 24px)); transition:transform .18s var(--ease); }
+.skip-link:focus{ transform:none; outline:2.5px solid var(--accent); outline-offset:2px; }
+
+a{ color:inherit; }
+/* Filet de sécurité : tout contrôle focalisable au clavier reçoit l'anneau accent (jamais l'anneau
+   par défaut du navigateur). Spécificité nulle (:where) → toute règle dédiée l'emporte. */
+:where(:focus-visible){ outline:2.5px solid var(--accent); outline-offset:2px; }
+a:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; box-shadow:var(--focus-halo); border-radius:6px; }
+main:focus{ outline:none; }
+
+/* Conteneur principal de page (commun à tous les modules) */
+.page{
+  position:relative; z-index:var(--z-page); display:flex; justify-content:center;
+  padding-block:clamp(14px,3vw,28px) 40px;
+  padding-inline:max(var(--gutter), env(safe-area-inset-left)) max(var(--gutter), env(safe-area-inset-right));
+}
+
+/* Micro-label (majuscules espacées, teinte d'accent profonde) */
+.eyebrow{ font-size:10.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--accent-deep); font-weight:700; }
+
+/* Message sans JavaScript */
+.taf-noscript{ margin:24px auto; max-width:520px; padding:14px 16px; border-radius:var(--radius-sm); background:var(--paper); border:1px solid var(--line-2); color:var(--ink-soft); font-size:14px; }
+
+/* ============================================================
+   3. BOUTONS
+============================================================ */
+.btn{ font-family:var(--font); font-size:13.5px; font-weight:600; line-height:1; border-radius:11px; padding:10px 15px; cursor:pointer; white-space:nowrap; border:1px solid var(--line-3); background:var(--paper); color:var(--ink); display:inline-flex; align-items:center; justify-content:center; gap:7px; text-decoration:none; -webkit-tap-highlight-color:transparent; touch-action:manipulation; transition:transform .12s var(--ease), box-shadow .16s var(--ease), background .16s var(--ease), border-color .16s var(--ease), color .16s var(--ease); }
+.btn svg{ flex:0 0 auto; }
+.btn:hover{ border-color:var(--line-4); box-shadow:var(--shadow-soft); }
+.btn:active{ transform:translateY(1px); }
+.btn:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; box-shadow:var(--focus-halo); }
+.btn:disabled{ opacity:.5; cursor:not-allowed; transform:none; box-shadow:none; }
+.btn.primary{ color:var(--on-accent); border-color:transparent; background:linear-gradient(180deg, var(--accent-top), var(--accent)); box-shadow:0 1px 2px rgba(20,18,8,.22), inset 0 1px 0 rgba(255,255,255,.35); }
+.btn.primary:hover{ filter:brightness(1.04); box-shadow:0 7px 18px -5px color-mix(in srgb, var(--accent) 58%, transparent); }
+.btn.ghost{ background:transparent; }
+.btn.small{ padding:8px 12px; font-size:12.5px; border-radius:9px; }
+.btn.iconly{ padding:9px; }
+.btn.danger, .danger{ color:var(--danger); border-color:color-mix(in srgb, var(--danger) 30%, var(--line-3)); }
+.btn.danger:hover, .danger:hover{ border-color:var(--danger); background:var(--danger-fill); }
+/* Bouton principal « danger » (action destructive confirmée). Alias .h-danger / .ih-danger :
+   classes encore posées par heures.js et cra.js. */
+.btn.primary.danger, .btn.primary.h-danger, .btn.primary.ih-danger{ color:#fff; border-color:transparent; background:linear-gradient(180deg, color-mix(in srgb, var(--danger) 86%, #fff), var(--danger)); box-shadow:0 1px 2px rgba(60,10,0,.25); }
+
+/* Carte radio (.taf-option) et case à cocher (.taf-case) — communes aux deux modules.
+   État par la bordure ET la pastille native, jamais la couleur seule. */
+.taf-option{ display:flex; align-items:flex-start; gap:10px; min-height:44px; padding:12px 14px; border:1.5px solid var(--line-2); border-radius:12px; background:var(--paper); cursor:pointer; -webkit-tap-highlight-color:transparent; transition:border-color .16s var(--ease), background .16s var(--ease); }
+.taf-option:hover{ border-color:var(--line-4); }
+.taf-option:has(input:checked){ border-color:var(--accent); background:var(--accent-fill-2); box-shadow:inset 0 0 0 1px var(--accent); }
+.taf-option input{ flex:0 0 auto; width:18px; height:18px; margin:1px 0 0; accent-color:var(--accent-deep); cursor:pointer; }
+.taf-option > span{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+.taf-option b{ font-size:14px; font-weight:700; color:var(--ink); }
+.taf-option small{ font-size:12px; color:var(--muted); line-height:1.4; }
+.taf-case{ display:flex; align-items:center; gap:10px; min-height:44px; font-size:13.5px; color:var(--ink-soft); cursor:pointer; line-height:1.4; }
+.taf-case input{ flex:0 0 auto; width:18px; height:18px; margin:0; accent-color:var(--accent-deep); cursor:pointer; }
+.taf-option input:focus-visible, .taf-case input:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; box-shadow:var(--focus-halo); }
+.taf-option input[type=radio]:focus-visible{ border-radius:50%; }
+
+/* ============================================================
+   4. BARRE SUPÉRIEURE
+      Marque « TAF » (icône/logo personnalisable) + témoin, navigation
+      de modules (≥700px), actions. Le verre dépoli est porté par
+      ::before : un backdrop-filter posé sur la barre elle-même en ferait
+      le bloc conteneur de ses descendants position:fixed (la barre
+      d'onglets mobile, section 12).
+============================================================ */
+.topbar{
+  position:sticky; top:0; z-index:var(--z-topbar); isolation:isolate;
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding-block:max(10px, env(safe-area-inset-top)) 10px;
+  padding-inline:max(clamp(12px,4vw,30px), env(safe-area-inset-left)) max(clamp(12px,4vw,30px), env(safe-area-inset-right));
+  border-bottom:1px solid var(--line);
+}
+.topbar::before{ content:""; position:absolute; inset:0; z-index:-1; background:rgba(246,246,244,.82); -webkit-backdrop-filter:saturate(150%) blur(18px); backdrop-filter:saturate(150%) blur(18px); }
+.brand{ display:flex; align-items:center; gap:10px; min-width:0; }
+.mark-slot{ flex:0 0 auto; width:28px; height:30px; color:var(--accent); display:inline-flex; }
+.mark-slot svg{ width:100%; height:100%; }
+.mark-slot img{ width:100%; height:100%; object-fit:contain; border-radius:6px; }
+.brand-name{ flex:0 0 auto; font-size:17px; font-weight:800; letter-spacing:.08em; color:var(--ink); line-height:1; }
+.top-actions{ display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+
+/* ============================================================
+   5. NAVIGATION DE MODULES
+      Un seul <nav> (un seul landmark) : contrôle segmenté dans la
+      barre au-delà de 700px, barre d'onglets fixée en bas en deçà
+      (section 12). Module actif : aria-current="page". La pastille
+      active porte un view-transition-name → elle glisse d'un onglet
+      à l'autre lors de la navigation (amélioration progressive).
+============================================================ */
+.taf-nav{ display:flex; justify-content:center; min-width:0; }
+.taf-nav-list{ display:flex; gap:2px; margin:0; padding:3px; list-style:none; border-radius:12px; background:color-mix(in srgb, var(--ink) 5%, transparent); border:1px solid var(--line-2); }
+.taf-nav-list li{ display:flex; }
+.taf-nav a{ position:relative; display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:36px; padding:0 14px; border-radius:9px; font-size:13px; font-weight:650; color:var(--muted); text-decoration:none; white-space:nowrap; -webkit-tap-highlight-color:transparent; transition:color .16s var(--ease), background .16s var(--ease); }
+.taf-nav a svg{ flex:0 0 auto; }
+.taf-nav a:hover{ color:var(--ink); }
+.taf-nav a[aria-current="page"]{ color:var(--ink); background:var(--paper); box-shadow:0 1px 2px rgba(16,18,24,.08), 0 0 0 1px var(--line-2); view-transition-name:taf-onglet; }
+.taf-nav a[aria-current="page"] svg{ color:var(--accent-deep); }
+.taf-nav a:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; box-shadow:var(--focus-halo); border-radius:9px; }
+/* Pastille « en cours » (chrono Heures, posée par TAF.nav) : en position absolue,
+   elle ne change jamais la largeur de l'onglet → aucun décalage de mise en page.
+   Forme + texte : point plein « 02:14 » en marche, demi-point « pause » en pause. */
+.taf-nav-pastille{ position:absolute; top:-7px; right:-6px; z-index:1; display:inline-flex; align-items:center; gap:4px; padding:0 6px 0 5px; min-height:17px; border-radius:99px; background:var(--accent); color:var(--on-accent); font-size:10px; font-weight:750; line-height:1; letter-spacing:.01em; font-variant-numeric:tabular-nums; white-space:nowrap; box-shadow:0 0 0 2px var(--paper), 0 1px 3px rgba(16,18,24,.25); pointer-events:none; animation:taf-fondu .2s var(--ease) both; }
+.taf-nav-pastille .tnp-point{ flex:0 0 auto; width:6px; height:6px; border-radius:50%; background:currentColor; border:1.5px solid currentColor; }
+.taf-nav-pastille[data-etat="pause"]{ background:var(--paper); color:var(--accent-deep); box-shadow:0 0 0 1.5px var(--accent-edge), 0 1px 3px rgba(16,18,24,.18); }
+.taf-nav-pastille[data-etat="pause"] .tnp-point{ background:linear-gradient(90deg, currentColor 50%, transparent 50%); }
+
+/* ============================================================
+   6. TÉMOIN DE SAUVEGARDE (piloté par TAF.temoin, ne stocke rien)
+============================================================ */
+.save-witness{ display:inline-flex; align-items:center; gap:6px; min-width:0; padding:4px 9px; border-radius:99px; background:var(--paper-2); border:1px solid var(--line-2); font-size:11px; font-weight:600; color:var(--muted); white-space:nowrap; max-width:min(46vw,220px); overflow:hidden; animation:taf-fondu .18s var(--ease) both; }
+.save-witness .sw-dot{ flex:0 0 auto; width:7px; height:7px; border-radius:50%; background:var(--faint); transition:background .16s var(--ease); }
+.save-witness .sw-text{ overflow:hidden; text-overflow:ellipsis; }
+.save-witness.is-cours .sw-dot{ background:var(--accent); animation:sw-blink 1s var(--ease) infinite; }
+.save-witness.is-ok .sw-dot{ background:var(--ok); }
+.save-witness.is-warn{ color:var(--danger-ink); border-color:color-mix(in srgb, var(--danger) 26%, var(--line-2)); background:var(--danger-fill); }
+.save-witness.is-warn .sw-dot{ background:var(--danger); }
+@keyframes sw-blink{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
+@keyframes taf-fondu{ from{ opacity:0; } to{ opacity:1; } }
+
+/* ============================================================
+   7. CHAMPS & INTERRUPTEUR
+============================================================ */
+select.field{ font-family:var(--font); font-weight:650; font-size:15px; color:var(--ink); appearance:none; -webkit-appearance:none; border:1px solid var(--line-3); background-color:var(--paper); border-radius:11px; padding:9px 32px 9px 13px; cursor:pointer; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' fill='none' stroke='%23697079' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>"); background-repeat:no-repeat; background-position:right 11px center; transition:border-color .16s var(--ease), box-shadow .16s var(--ease); }
+select.field:hover{ border-color:var(--line-4); }
+select.field:focus-visible{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3.5px var(--accent-ring); }
+
+/* Champ « étiquette + valeur soulignée » */
+.field{ display:flex; flex-direction:column; gap:5px; min-width:0; }
+.field > label{ font-size:10px; letter-spacing:.11em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+.field input.value{ font-family:var(--font); font-size:15px; color:var(--ink); font-weight:550; border:none; border-bottom:1.5px solid var(--line-2); background:transparent; padding:6px 2px; outline:none; transition:border-color .16s var(--ease); min-width:0; width:100%; border-radius:0; }
+.field input.value::placeholder{ color:var(--faint); font-weight:400; }
+.field input.value:hover{ border-bottom-color:var(--line-3); }
+.field input.value:focus{ border-bottom-color:var(--accent); }
+
+/* Champ encadré (composant commun : saisie libre, nombres, noms…) — une seule
+   définition pour tous les modules ; les paliers tactiles sont en section 12. */
+.taf-input{ font-family:var(--font); font-size:13.5px; color:var(--ink); border:1px solid var(--line-3); border-radius:10px; padding:9px 12px; outline:none; background:var(--paper); min-width:0; transition:border-color .16s var(--ease), box-shadow .16s var(--ease); }
+.taf-input::placeholder{ color:var(--faint); }
+.taf-input:hover{ border-color:var(--line-4); }
+.taf-input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-ring); }
+
+/* Interrupteur (case à cocher stylée, role="switch") */
+.switch{ position:relative; width:44px; height:26px; flex:0 0 auto; cursor:pointer; }
+/* La case réelle (transparente) déborde de 9px en haut et en bas : cible tactile ≥44px */
+.switch input{ position:absolute; inset:-9px -2px; width:auto; height:auto; margin:0; opacity:0; cursor:pointer; z-index:1; }
+.switch .track{ position:absolute; inset:0; background:var(--line-3); border-radius:99px; transition:background .18s var(--ease); }
+.switch .thumb{ position:absolute; top:3px; left:3px; width:20px; height:20px; background:#fff; border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:transform .18s var(--ease); }
+.switch input:checked + .track{ background:var(--accent); }
+.switch input:checked + .track + .thumb{ transform:translateX(18px); }
+.switch input:focus-visible + .track{ outline:2.5px solid var(--accent); outline-offset:2px; box-shadow:var(--focus-halo); }
+
+/* ============================================================
+   8. VOILE, TIROIR, SECTION « APPARENCE »
+      Surfaces fermées : visibility:hidden (après l'animation) → hors
+      de l'ordre de tabulation, jamais focalisables hors écran.
+============================================================ */
+.overlay{ position:fixed; inset:0; z-index:var(--z-overlay); background:rgba(16,18,24,.42); opacity:0; visibility:hidden; transition:opacity .25s var(--ease), visibility 0s linear .25s; -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); }
+.overlay.open{ opacity:1; visibility:visible; transition:opacity .25s var(--ease), visibility 0s; }
+
+.drawer{ position:fixed; top:0; right:0; bottom:0; width:min(420px, 92vw); z-index:var(--z-drawer); background:var(--paper); box-shadow:var(--shadow-pop); display:flex; flex-direction:column; padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); transform:translateX(100%); visibility:hidden; transition:transform .3s var(--ease), visibility 0s linear .3s; }
+.drawer.open{ transform:none; visibility:visible; transition:transform .3s var(--ease), visibility 0s; }
+.drawer-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 20px; border-bottom:1px solid var(--line); flex:0 0 auto; }
+.drawer-head h2{ margin:0; font-size:16px; font-weight:700; letter-spacing:-.01em; }
+.drawer-head h2:focus{ outline:none; }
+.drawer-body{ flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; padding:18px 20px 40px; padding-right:max(20px, env(safe-area-inset-right)); }
+.dgroup{ margin-bottom:26px; }
+.dgroup > h3{ margin:0 0 11px; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+.dgroup-sep{ height:1px; background:var(--line); margin:4px 0 24px; border:0; }
+
+.swatches{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+.swatch-btn{ position:relative; width:34px; height:34px; border-radius:10px; border:2px solid #fff; background:var(--sw, var(--accent)); box-shadow:0 0 0 1px var(--line-3); cursor:pointer; padding:0; transition:transform .12s var(--ease), box-shadow .16s var(--ease); }
+.swatch-btn::after{ content:""; position:absolute; inset:-5px; }  /* cible tactile 44px */
+.swatch-btn:hover{ transform:scale(1.08); }
+.swatch-btn.active{ box-shadow:0 0 0 2px #fff, 0 0 0 4px var(--ink); }
+.swatch-btn:focus-visible{ outline:2.5px solid var(--accent); outline-offset:4px; }
+.color-row{ display:inline-flex; align-items:center; gap:10px; margin-top:14px; cursor:pointer; font-size:12.5px; color:var(--muted); }
+.color-row input[type=color]{ width:44px; height:36px; border:1px solid var(--line-3); border-radius:9px; background:var(--paper); padding:3px; cursor:pointer; }
+.color-row input[type=color]:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; box-shadow:var(--focus-halo); }
+.marks{ display:flex; flex-wrap:wrap; gap:9px; }
+.mark-btn{ width:46px; height:46px; border-radius:11px; border:1.5px solid var(--line-3); background:var(--paper); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; color:var(--accent); padding:0; transition:border-color .16s var(--ease), transform .12s var(--ease); }
+.mark-btn:hover{ transform:translateY(-1px); border-color:var(--line-4); }
+.mark-btn.active{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-ring); }
+.mark-btn:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; box-shadow:var(--focus-halo); }
+.mark-btn svg{ width:24px; height:26px; }
+.drow{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:12px; min-width:0; }
+.drow .lbl{ font-size:13px; color:var(--ink-soft); min-width:0; }
+.drow-actions{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.logo-preview{ width:46px; height:46px; border-radius:11px; border:1px solid var(--line-2); object-fit:contain; background:var(--paper); }
+.dnote{ font-size:11.5px; color:var(--muted); line-height:1.5; margin:10px 0 0; }
+
+/* ============================================================
+   8 bis. FEUILLES & DIALOGUES (composant commun)
+      Feuille basse < 700 px (poignée : TAF.glisserPourFermer),
+      dialogue centré au-delà (largeur --feuille-l, 480 px par
+      défaut). Même DOM, une seule classe ; transform / opacity.
+      Fermée : visibility:hidden → hors de l'ordre de tabulation.
+      Focus : TAF.gererModale. Le corps défile, jamais la page.
+============================================================ */
+.overlay.overlay-feuille{ z-index:var(--z-sheet-overlay); }
+.taf-feuille{ position:fixed; left:0; right:0; bottom:0; z-index:var(--z-sheet); display:flex; flex-direction:column; max-height:calc(100% - 20px - env(safe-area-inset-top)); background:var(--paper); border-radius:20px 20px 0 0; box-shadow:var(--shadow-pop); overflow:hidden; transform:translateY(100%); visibility:hidden; transition:transform .3s var(--ease), visibility 0s linear .3s; }
+.taf-feuille.open{ transform:none; visibility:visible; transition:transform .3s var(--ease), visibility 0s; }
+.taf-feuille-poignee{ flex:0 0 auto; display:flex; justify-content:center; padding:8px 0 6px; cursor:grab; touch-action:none; }
+.taf-feuille-poignee:active{ cursor:grabbing; }
+.taf-feuille-poignee span{ width:42px; height:5px; border-radius:99px; background:var(--line-3); }
+.taf-feuille-tete{ flex:0 0 auto; display:flex; align-items:center; gap:12px; padding-block:2px 10px; padding-inline:max(18px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right)); }
+.taf-feuille-tete h2{ flex:1 1 auto; min-width:0; margin:0; font-size:17px; font-weight:750; letter-spacing:-.015em; line-height:1.25; overflow-wrap:anywhere; }
+.taf-feuille-tete h2:focus{ outline:none; }
+.taf-feuille-corps{ flex:1 1 auto; min-height:0; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; display:flex; flex-direction:column; gap:16px; padding-block:6px 18px; padding-inline:max(18px, env(safe-area-inset-left)) max(18px, env(safe-area-inset-right)); }
+.taf-feuille-pied{ flex:0 0 auto; display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:10px; border-top:1px solid var(--line); background:var(--paper-2); padding-block:12px calc(12px + env(safe-area-inset-bottom)); padding-inline:max(18px, env(safe-area-inset-left)) max(18px, env(safe-area-inset-right)); }
+.taf-feuille-pied:empty{ display:none; }
+@media screen and (min-width:700px){
+  .taf-feuille{ top:50%; bottom:auto; left:50%; right:auto; width:min(var(--feuille-l, 480px), calc(100vw - 48px)); max-height:min(88vh, 760px); max-height:min(88dvh, 760px); border-radius:var(--radius); border:1px solid var(--line-2); transform:translate(-50%, calc(-50% + 14px)); opacity:0; transition:transform .26s var(--ease), opacity .22s var(--ease), visibility 0s linear .26s; }
+  .taf-feuille.open{ transform:translate(-50%, -50%); opacity:1; transition:transform .26s var(--ease), opacity .22s var(--ease), visibility 0s; }
+  .taf-feuille-poignee{ display:none; }
+  .taf-feuille-tete{ padding:18px 14px 10px 22px; }
+  .taf-feuille-corps{ padding:6px 22px 20px; }
+  .taf-feuille-pied{ padding:12px 22px 14px; }
+}
+@media screen and (min-width:700px) and (max-height:620px){
+  .taf-feuille{ max-height:calc(100vh - 20px); max-height:calc(100dvh - 20px); }
+}
+
+/* ============================================================
+   9. TOASTS — retour visible d'une action, doublé d'une annonce
+      aria-live (TAF.annoncer : le texte du toast est aria-hidden).
+      Un seul toast à la fois → aucun décalage de mise en page.
+      Action éventuelle (« Annuler ») : vrai bouton, Alt+U ; compte à
+      rebours en scaleX, en pause au survol et au focus (WCAG 2.2.1).
+      --toast-decalage : réserve posée par un module (ex. dock).
+============================================================ */
+.taf-toasts{ position:fixed; left:50%; bottom:calc(16px + var(--nav-h) + var(--toast-decalage, 0px) + env(safe-area-inset-bottom)); z-index:var(--z-toast); display:grid; width:max-content; max-width:calc(100vw - 32px); transform:translateX(-50%); pointer-events:none; }
+.taf-toast{ grid-area:1 / 1; position:relative; overflow:hidden; display:flex; align-items:center; gap:10px; padding:11px 16px; border-radius:12px; background:var(--ink); color:#fff; font-size:13.5px; font-weight:600; line-height:1.35; box-shadow:var(--shadow-pop); pointer-events:auto; animation:taf-toast-in .26s var(--ease) both; }
+.taf-toast-msg{ min-width:0; overflow-wrap:anywhere; }
+.taf-toast.is-out{ animation:taf-toast-out .2s var(--ease) both; }
+.taf-toast-dot{ flex:0 0 auto; width:8px; height:8px; border-radius:50%; background:var(--accent); }
+.taf-toast.is-succes .taf-toast-dot{ background:#3DDC97; }
+.taf-toast.is-erreur .taf-toast-dot{ background:#FF7A6B; }
+.taf-toast.a-action{ padding-right:8px; }
+.taf-toast-action{ flex:0 0 auto; margin-left:4px; min-height:36px; padding:0 13px; border:none; border-radius:9px; font-family:var(--font); font-size:13px; font-weight:750; color:#fff; background:rgba(255,255,255,.14); cursor:pointer; -webkit-tap-highlight-color:transparent; touch-action:manipulation; transition:background .16s var(--ease); }
+.taf-toast-action:hover{ background:rgba(255,255,255,.24); }
+.taf-toast-action:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; box-shadow:0 0 0 4.5px rgba(255,255,255,.55); }
+.taf-toast-barre{ position:absolute; left:0; right:0; bottom:0; height:3px; background:var(--accent); transform-origin:left center; animation:taf-toast-compte var(--taf-toast-duree, 3s) linear both; }
+.taf-toast.is-pause .taf-toast-barre{ animation-play-state:paused; }
+@keyframes taf-toast-in{ from{ opacity:0; transform:translateY(10px) scale(.98); } to{ opacity:1; transform:none; } }
+@keyframes taf-toast-out{ from{ opacity:1; transform:none; } to{ opacity:0; transform:translateY(6px); } }
+@keyframes taf-toast-compte{ from{ transform:scaleX(1); } to{ transform:scaleX(0); } }
+
+/* ============================================================
+   9 bis. HEXAGONE TRI-ÉTAT — pastille « journée » commune
+      (grille du CRA .cell-full, aperçu d'import et vues Heures
+      .pastille-jour). État encodé par la FORME (vide / demi
+      gauche / demi droite / pleine + coche), lisible en niveaux
+      de gris. Taille de .pastille-jour réglable par le module.
+============================================================ */
+.pastille-jour{ position:relative; flex:0 0 auto; width:22px; height:22px; display:inline-grid; place-items:center; }
+:is(.cell-full, .pastille-jour) .cf-hex{ position:relative; width:100%; height:100%; display:grid; place-items:center;
+  -webkit-clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%); clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+  background:var(--line-3); transition:background .16s var(--ease); }
+:is(.cell-full, .pastille-jour) .cf-hex::before{ content:""; position:absolute; width:74%; height:74%;
+  -webkit-clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%); clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+  background:var(--paper); transition:background .16s var(--ease); }
+:is(.cell-full, .pastille-jour) .cf-hex::after{ content:""; position:absolute; left:36%; top:25%; width:23%; height:45%; border:solid var(--on-accent); border-width:0 2px 2px 0; transform:rotate(45deg); opacity:0; transition:opacity .14s var(--ease); }
+:is(.cell-full, .pastille-jour)[data-state="half"] .cf-hex{ background:var(--accent-edge); }
+:is(.cell-full, .pastille-jour)[data-state="half"][data-side="am"] .cf-hex::before{ background:linear-gradient(90deg, var(--accent-fill) 50%, var(--paper) 50%); }
+:is(.cell-full, .pastille-jour)[data-state="half"][data-side="pm"] .cf-hex::before{ background:linear-gradient(90deg, var(--paper) 50%, var(--accent-fill) 50%); }
+:is(.cell-full, .pastille-jour)[data-state="full"] .cf-hex{ background:var(--accent); box-shadow:0 1px 2px rgba(20,18,8,.25); }
+:is(.cell-full, .pastille-jour)[data-state="full"] .cf-hex::before{ background:linear-gradient(180deg, var(--accent-top), var(--accent)); }
+:is(.cell-full, .pastille-jour)[data-state="full"] .cf-hex::after{ opacity:1; }
+
+/* ============================================================
+   10. ÉTAT VIDE (module à venir, liste vide…)
+============================================================ */
+.taf-vide{ width:100%; max-width:520px; margin:clamp(24px,9vh,96px) auto 0; text-align:center; display:flex; flex-direction:column; align-items:center; gap:14px; padding:clamp(28px,5vw,44px) clamp(20px,5vw,40px); background:var(--paper); border:1px solid var(--line-2); border-radius:var(--radius); box-shadow:var(--shadow-sheet); }
+.taf-vide-ic{ width:58px; height:58px; display:grid; place-items:center; border-radius:16px; color:var(--accent-deep); background:var(--accent-fill-2); border:1px solid var(--accent-edge); }
+.taf-vide h1{ margin:0; font-size:clamp(20px,3vw,24px); font-weight:750; letter-spacing:-.02em; line-height:1.15; }
+.taf-vide p{ margin:0; color:var(--muted); font-size:14.5px; line-height:1.55; max-width:40ch; }
+.taf-vide .btn{ margin-top:6px; }
+
+/* ============================================================
+   11. TRANSITIONS INTER-PAGES (View Transitions, amélioration
+       progressive : ignorées par les navigateurs non compatibles
+       et en file://). transform / opacity uniquement.
+============================================================ */
+/* Transitions INTER-documents (@view-transition navigation:auto) volontairement
+   NON activées : sous la CSP stricte (§8 de CLAUDE.md), Chromium les abandonne
+   à l'arrivée (« Transition was aborted… ViewTransition opt-in disabled »,
+   vérifié : la même page sans CSP transitionne). On ne relâche pas la CSP pour
+   un effet. À la place : entrée douce du contenu à chaque page (opacity seule,
+   aucun bloc conteneur créé, coupée en mouvement réduit). Les transitions
+   internes à une page (document.startViewTransition) restent actives. */
+main.page, main.h-zone{ animation:taf-entree-page .22s var(--ease) both; }
+@keyframes taf-entree-page{ from{ opacity:0; } }
+main.page{ view-transition-name:taf-contenu; }
+::view-transition-old(root), ::view-transition-new(root){ animation-duration:.2s; animation-timing-function:var(--ease); }
+::view-transition-group(taf-onglet){ animation-duration:.3s; animation-timing-function:var(--ease); }
+::view-transition-old(taf-contenu){ animation:taf-vt-sortie .16s var(--ease) both; }
+::view-transition-new(taf-contenu){ animation:taf-vt-entree .3s var(--ease) both; }
+@keyframes taf-vt-sortie{ to{ opacity:0; } }
+@keyframes taf-vt-entree{ from{ opacity:0; transform:translateY(10px); } to{ opacity:1; transform:none; } }
+
+/* ============================================================
+   12. PALIERS RESPONSIVE (SOCLE)
+============================================================ */
+/* Paliers tactiles (≤899px ou pointeur grossier) : cibles ≥44px. */
+@media screen and (max-width:899px), screen and (pointer:coarse){
+  .btn{ min-height:44px; }
+  .btn.iconly{ min-width:44px; }
+  select.field, .field input.value, .taf-input{ min-height:44px; }
+  .color-row input[type=color]{ height:44px; }
+  .taf-nav a{ min-height:44px; }
+  .taf-toast-action{ min-height:44px; }
+}
+
+/* Téléphones (<700px) : la navigation devient une barre d'onglets fixée en bas,
+   au-dessus de la zone de sécurité. Le contenu réserve sa hauteur (padding) :
+   il n'est jamais masqué. Pop-up, fiche et tiroir passent au-dessus (z-index). */
+@media screen and (max-width:699px){
+  :root{ --nav-h:62px; }
+  .taf-nav{ position:fixed; left:0; right:0; bottom:0; z-index:var(--z-topbar); isolation:isolate; padding-block:6px calc(6px + env(safe-area-inset-bottom)); padding-inline:max(10px, env(safe-area-inset-left)) max(10px, env(safe-area-inset-right)); border-top:1px solid var(--line); }
+  .taf-nav::before{ content:""; position:absolute; inset:0; z-index:-1; background:rgba(250,250,248,.9); -webkit-backdrop-filter:saturate(150%) blur(18px); backdrop-filter:saturate(150%) blur(18px); }
+  .taf-nav-list{ width:100%; max-width:480px; margin:0 auto; gap:6px; padding:0; background:none; border:none; border-radius:0; }
+  .taf-nav-list li{ flex:1 1 0; }
+  .taf-nav a{ flex:1 1 auto; flex-direction:column; gap:3px; min-height:50px; padding:4px 8px; border-radius:12px; font-size:11.5px; letter-spacing:.01em; }
+  .taf-nav a svg{ width:20px; height:20px; }
+  .taf-nav a[aria-current="page"]{ background:var(--accent-fill-2); color:var(--accent-deep); box-shadow:inset 0 0 0 1px var(--accent-edge); }
+  .taf-nav-pastille{ top:2px; right:auto; left:calc(50% + 5px); }
+  .page{ padding-block-end:calc(40px + var(--nav-h) + env(safe-area-inset-bottom)); }
+  select.field, .field input.value, .taf-input{ font-size:16px; }   /* évite le zoom iOS au focus */
+}
+
+/* Paysage court (téléphone couché) : barre d'onglets compacte, icône + libellé en ligne */
+@media screen and (max-width:699px) and (orientation:landscape) and (max-height:500px){
+  :root{ --nav-h:52px; }
+  .taf-nav{ padding-block:4px calc(4px + env(safe-area-inset-bottom)); }
+  .taf-nav a{ flex-direction:row; gap:7px; min-height:44px; font-size:12.5px; }
+  .topbar{ padding-block:max(6px, env(safe-area-inset-top)) 6px; }
+}
+
+/* Petits téléphones : actions de la barre en icônes seules */
+@media screen and (max-width:389px){
+  .top-actions .btn span{ display:none; }
+  .top-actions .btn{ padding:9px; min-width:44px; }
+  .brand{ gap:8px; }
+}
+
+/* Tablette et plus (≥700px) : marque | navigation centrée | actions */
+@media screen and (min-width:700px){
+  .topbar{ display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); }
+  .top-actions{ justify-self:end; }
+}
+/* Entre 700 et 899px : libellés secondaires de la barre masqués pour laisser respirer la navigation */
+@media screen and (min-width:700px) and (max-width:899px){
+  .top-actions .btn.ghost span{ display:none; }
+  .top-actions .btn.ghost{ padding:9px; min-width:44px; }
+}
+
+/* Anti-cadre (taf.js) : encadrée par un tiers, la page n'affiche que l'avis */
+.taf-encadre body > :not(.taf-cadre-avis){ display:none !important; }
+.taf-cadre-avis{ min-height:100vh; min-height:100dvh; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:24px var(--gutter); text-align:center; color:var(--ink); }
+.taf-cadre-avis p{ margin:0; max-width:36ch; font-size:15px; line-height:1.5; }
+.taf-cadre-avis .btn{ min-height:44px; }
+
+/* ============================================================
+   13. MOUVEMENT RÉDUIT
+============================================================ */
+@media (prefers-reduced-motion:reduce){
+  @view-transition{ navigation:none; }
+  *, *::before, *::after{ animation:none !important; transition:none !important; scroll-behavior:auto !important; }
+  .taf-toast-barre{ display:none; }   /* compte à rebours figé : masqué plutôt que trompeur */
+}
+
+/* ============================================================
+   14. IMPRESSION — « chrome » commun masqué (le document de chaque
+       module a sa propre feuille d'impression).
+============================================================ */
+@media print{
+  html, body{ background:#fff !important; }
+  body::before, body::after{ display:none !important; }
+  *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+  .topbar, .taf-nav, .overlay, .drawer, .taf-toasts, .skip-link, .taf-noscript{ display:none !important; }
+  main.page{ view-transition-name:none; }
+}

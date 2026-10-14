@@ -1,174 +1,270 @@
-# CLAUDE.md — Générateur de CRA
+# CLAUDE.md — TAF (suite : CRA + Heures)
 
-Contexte de travail pour tout agent qui touche à cet outil. À lire **avant**
-toute modification. Les trois sections qui comptent le plus : le **principe de
-généralisation** (critère prioritaire), les **interdits**, le **système
-visuel**.
+Contexte de travail pour tout agent qui touche à TAF. À lire **avant** toute
+modification. Ce qui compte le plus : le **principe de généralisation**
+(critère prioritaire, §3), l'**architecture** (§2), les **interdits** (§5), la
+**sécurité** (§8) et la **non-régression** (§9).
 
 ---
 
 ## 1. Raison d'être
 
-**Générateur de CRA** (Compte Rendu d'Activité) : un outil qui permet à un
-consultant / une société sous-traitante de produire son CRA mensuel, puis de
-l'exporter en PDF prêt à signer.
+**TAF** est la boîte à outils du consultant / de la société sous-traitante :
+100 % locale, sans compte ni serveur. Deux modules, **une page chacun** :
 
-Parcours : choisir mois/année → cocher les demi-journées travaillées sur un
-calendrier (matin / après-midi, ou journée complète) → saisir l'activité par
-jour → renseigner les infos (société, client, consultant, destinataire) →
-signer → exporter le PDF sur une page A4.
-
-En bonus (hors PDF) : une estimation de revenu indicative (TJM × jours,
-moins les charges).
+- **CRA** (`index.html`) — Compte Rendu d'Activité mensuel : cocher les
+  demi-journées sur un calendrier (pop-up), saisir l'activité, renseigner les
+  infos, signer, exporter un PDF A4 d'une page. Bonus hors PDF : estimation de
+  revenu (TJM × jours − charges).
+- **Heures** (`heures.html`) — suivi / comptabilité des heures de travail.
+  Spécification détaillée : [`docs/heures-spec.md`](docs/heures-spec.md).
 
 ## 2. Architecture — à préserver
 
-- **Un seul fichier : [`index.html`](index.html).** HTML + `<style>` inline +
-  un `<script>` en IIFE. Rien d'autre.
-- **Zéro dépendance, zéro build, zéro framework.** Vanilla JS, pas de npm au
-  runtime, pas de bundler, pas d'étape de compilation. On ouvre le fichier,
-  ça marche.
-- **100 % côté client, hors-ligne.** Aucun appel réseau. La persistance passe
-  **uniquement** par `localStorage` (clé `cra_app_v3`, cf. `STORE_KEY`),
-  protégée si `localStorage` est indisponible.
-- **Confidentialité comme promesse produit** : « Données enregistrées
-  localement sur cet appareil uniquement. Rien n'est envoyé en ligne. »
-- Hébergé en page GitHub Pages (`benderm27.github.io`).
-- Pour tester : ouvrir `index.html` dans un navigateur (ou le servir en
-  statique). Pas de commande de lancement.
+Site **statique multi-pages** servi par GitHub Pages (`benderm27.github.io`).
+**Zéro build, zéro dépendance, zéro framework** : HTML + CSS + JS vanilla,
+fichiers locaux uniquement.
+
+| Fichier | Rôle |
+|---|---|
+| `index.html` | Module CRA (URL historique conservée) |
+| `heures.html` | Module Heures |
+| `assets/taf.css` | Socle visuel partagé : jetons, base, composants communs (topbar, navigation de modules, boutons, champs `.taf-input`, tiroir, feuilles / dialogues `.taf-feuille`, overlay, toasts, témoin, pastille tri-état), animations, view-transitions |
+| `assets/taf.js` | Noyau partagé exposé en global gelé `TAF` (API documentée en tête de fichier) : stockage sûr, sauvegarde différée partagée (`creerSauvegarde`), apparence partagée + section « Apparence » du tiroir, `gererModale`, `glisserPourFermer`, `annoncer`, toasts, utilitaires DOM sûrs, validateurs, formats fr-FR, navigation (+ pastille chrono en cours), impression (`preparerImpression`), et logique pure du module Heures `TAF.heures.*` (conversion heures → demi-journées, plan d'import CRA…) |
+| `assets/cra-donnees.js` | Validateurs purs du CRA (sans DOM, global gelé), chargés avant `cra.js` et par `tests/` |
+| `assets/cra.css`, `assets/cra.js` | Spécifique CRA (écran) |
+| `assets/cra-print.css` | Impression du CRA, liée en `media="print"` et basculée en `all` par l'auto-fit le temps de mesurer : **toute règle d'impression du CRA va ici**, jamais dans un `@media print` d'une autre feuille (elle ne serait pas prise en compte par la mesure) |
+| `assets/heures.css`, `assets/heures.js` | Spécifique Heures |
+| `tests/` | Tests unitaires navigateur, zéro dépendance (`index.html`, `harnais.js`, `tests.js`, `cra.test.js`, `heures.test.js`) |
+| `assets/favicon.svg`, `_config.yml` | Favicon ; exclusion Jekyll des fichiers internes |
+
+- **Scripts classiques** `<script src="…" defer>`, `taf.js` chargé en premier.
+  **Pas de modules ES** : ils échouent en `file://`.
+- **Ce qui est commun aux deux pages vit dans `taf.css` / `taf.js`** — jamais
+  copié-collé dans une page.
+- **Titre fixe** : `<title>TAF</title>` sur toutes les pages, jamais modifié à
+  l'exécution. Seule exception : entre `beforeprint` et `afterprint`, le titre
+  prend le nom de fichier PDF (`CRA_<société>_<mois>_<année>`, nom par défaut
+  proposé par le navigateur) puis revient immédiatement à `TAF`.
+- **Navigation** : bascule de module dans la topbar (≥ 700 px) / barre
+  d'onglets fixée en bas avec safe-area (< 700 px) ; `aria-current="page"` sur
+  le module actif ; fondu d'entrée du contenu à chaque page. Les transitions
+  inter-documents (`@view-transition`) sont **désactivées** : sous la CSP
+  stricte, Chromium les abandonne (vérifié) et on ne relâche pas la CSP pour
+  un effet. Les transitions internes à une page (`startViewTransition`)
+  restent actives.
+- **100 % côté client, hors-ligne, local** : persistance uniquement par
+  `localStorage`, protégée si indisponible. Aucun appel réseau.
+- Pour tester : servir le dossier en statique (`http://`) ; l'ouverture directe
+  en `file://` sous Chrome doit rester fonctionnelle.
+
+### Clés de stockage — un seul écrivain par clé
+
+| Clé | Écrivain | Contenu |
+|---|---|---|
+| `taf_prefs_v1` | `taf.js` (API `TAF`, appelée par les deux pages ; synchro inter-onglets via l'événement `storage`) | apparence partagée `{accent, mark, logo, motif}`, migrée une fois depuis `cra_app_v3` |
+| `cra_app_v3` | `cra.js` | le CRA (`state`, sans l'apparence après migration) |
+| `cra_profiles_v1` | `cra.js` | profils d'identité (l'apparence d'un profil est appliquée via l'API `TAF`) |
+| `taf_heures_v1` | `heures.js` | module Heures |
+
+Un module **n'écrit jamais** dans la clé d'un autre ; il peut la **lire**
+(ex. le CRA lit `taf_heures_v1` pour proposer « Importer mes heures »).
 
 ## 3. Principe de généralisation — CRITÈRE PRIORITAIRE
 
-L'outil doit rester **générique, réutilisable, non couplé à un cas
-particulier**. Toute évolution est jugée d'abord là-dessus. Concrètement :
+TAF doit rester **générique, réutilisable, non couplé à un cas particulier**.
+Toute évolution est jugée d'abord là-dessus :
 
-1. **Une seule source de vérité.** `state.days = { [numJour]: {am, pm, act} }`
-   (plus le reste de `state` : `fields`, `accent`, `mark`, `logo`, `motif`,
-   `provisoire`, `tjm`, `charges`, `sig`, `month`, `year`, `presets`,
-   `archive` ; + la clé séparée `cra_profiles_v1` pour les profils
-   d'identité). La grille écran, le tableau PDF,
-   le total, l'estimation et la fiche du jour (mobile) **dérivent tous du même
-   état**. Le même état alimente les vues mobile et desktop — **jamais** deux
-   logiques parallèles à maintenir.
+1. **Une seule source de vérité par module.** CRA : `state.days =
+   { [numJour]: {am, pm, act} }` (+ `fields`, `provisoire`, `tjm`, `charges`,
+   `sig`, `month`, `year`, `presets`, `archive`). La grille, le tableau PDF, le
+   total, l'estimation et la fiche du jour **dérivent tous du même état** — une
+   seule logique pour mobile et desktop.
+2. **Vues et exports dérivés, jamais dupliqués** (`etatJour()`,
+   `recalculer()`, `construireTableauPdf()`…). Pas de seconde copie d'état.
+3. **Rien de codé en dur pour un cas d'usage** : société, client, consultant,
+   TJM, projets, objectif d'heures, mise en page… tout le spécifique est
+   **paramétrable** avec un défaut sensé. L'identité ALVEOLEN (ambre
+   `#E2A400`, hexagone) n'est qu'un **défaut** remplaçable.
+4. **Heures** : projets / étiquettes vides au départ ; objectif hebdomadaire,
+   durée d'une journée, seuils de conversion heures → demi-journées :
+   paramétrables (défauts : 35 h / semaine, 7 h / jour) — jamais une hypothèse
+   de contrat codée en dur.
+5. **Une règle = un endroit** : une règle utilisée par les deux modules vit
+   dans `taf.js`.
+6. **Auto-suffisant** : pas de réseau, de service externe ni de build
+   introduits « en passant ».
 
-2. **Vues et exports dérivés, jamais dupliqués.** L'état d'un jour (pastille
-   tri-état), le total, le tableau PDF sont **recalculés à la demande** depuis
-   `state` (`etatJour()`, `recalculer()`, `construireTableauPdf()`). Pas de
-   seconde copie de l'état à resynchroniser.
-
-3. **Rien de hardcodé à un cas d'usage.** Aucun nom de société, client,
-   consultant, ESN, TJM ou mise en page figée dans le code. Tout ce qui est
-   spécifique est **paramétrable** : couleur d'accent, logo/icône, motif,
-   valeurs des champs, rôles des signataires, TJM/charges. L'identité ALVEOLEN
-   (accent ambre `#E2A400`, hexagone) n'est qu'un **défaut**, entièrement
-   remplaçable par l'utilisateur.
-
-4. **Auto-suffisant.** Un seul fichier, sans dépendance ni backend. On
-   n'introduit pas de réseau, de service externe ou de build « en passant ».
-
-> Toute feature qui exigerait du spécifique doit être proposée en
+> Toute feature qui exigerait du spécifique est proposée en
 > **paramétrable / optionnel avec un défaut sensé**, jamais en dur.
 
 ## 4. Système visuel
 
-Tous les styles vivent dans le `<style>` de `index.html`, organisés en
-sections numérotées (1. Jetons de design … 15. Système responsive). Réutiliser
-les jetons existants ; ne pas réintroduire de valeurs en dur.
+Socle dans `assets/taf.css`, spécificités dans le CSS de chaque module.
+Réutiliser les jetons ; ne pas réintroduire de valeurs en dur.
 
 ### Palette (jetons `:root`)
-- **Accent ambre ALVEOLEN** : `--accent:#E2A400`, `--on-accent` calculé pour le
-  contraste. Variantes dérivées via `color-mix()` : `--accent-top`,
+- **Accent** (défaut ambre ALVEOLEN) : `--accent:#E2A400`, `--on-accent`
+  calculé pour le contraste. Variantes via `color-mix()` : `--accent-top`,
   `--accent-deep`, `--accent-fill`, `--accent-fill-2`, `--accent-edge`,
-  `--accent-ring`. **Ne pas coder de teinte d'accent en dur** — passer par ces
-  jetons pour que la couleur personnalisée fonctionne.
-- **Encre** : `--ink #15171C`, `--ink-soft`, `--muted`, `--faint`.
+  `--accent-ring`. **Jamais de teinte d'accent en dur** — l'accent est
+  personnalisable.
+- **Encre** : `--ink`, `--ink-soft`, `--muted`, `--faint`.
 - **Lignes** : `--line`, `--line-2`, `--line-3`.
 - **Fonds** : `--canvas-top`, `--canvas`, `--paper`, `--paper-2`.
 
-### Rayons, ombres, mouvement
-- Rayons : `--radius:20px`, `--radius-md:14px`, `--radius-sm:11px`, `--r1:7px`.
-- Ombres en couches : `--shadow-soft`, `--shadow-sheet`, `--shadow-pop`.
-- Typo : pile système (`--font`, `-apple-system…`). Chiffres en
-  `font-variant-numeric:tabular-nums`. Micro-labels en majuscules + letter-spacing.
-- Animation : easing unique `--ease` = `cubic-bezier(.22,.61,.27,1)`.
-- Signature de marque : motif hexagone (alvéole) en fond, opacité ~0.05,
-  désactivable (`body.no-motif`).
+### Rayons, ombres, typo
+- Rayons `--radius` 20 / `--radius-md` 14 / `--radius-sm` 11 / `--r1` 7.
+- Ombres en couches `--shadow-soft`, `--shadow-sheet`, `--shadow-pop`.
+- Pile système (`--font`). Chiffres en `tabular-nums`. Micro-labels en
+  majuscules + letter-spacing.
+- Signature : motif hexagone en fond (~0.05), désactivable (`body.no-motif`).
+- Icônes de marque `TAF.MARQUES` (`hex` défaut, `drop`, `doc`, `spark`,
+  `bolt`, `leaf`), logo importable (réduit à l'import), 8 swatches d'accent.
 
-### Icônes / identité
-- Jeu d'icônes de marque : `hex` (défaut), `drop`, `doc`, `spark`, `bolt`,
-  `leaf` (objet `MARKS`). Logo importé possible (remplace l'icône, apparaît sur
-  le PDF).
-- Palette de swatches d'accent : 8 couleurs (`SWATCHES`).
+### Responsive — « ultra responsive »
+Le CRA garde ses jetons de grille pilotés par palier (`--cell-min`,
+`--slot-h`, `--num-size`, `--full-size` — ne pas figer ces tailles ailleurs).
+Calendrier CRA en **pop-up modale** ; contenu du document en pleine largeur
+(une colonne en mobile, deux colonnes internes sur grand écran).
 
-### Système responsive continu (jetons pilotes)
-Les dimensions du calendrier viennent de jetons recalculés par palier :
-`--cell-min`, `--slot-h`, `--num-size`, `--full-size`. **Ne pas figer ces
-tailles en pixels ailleurs** — ajuster le jeton au palier voulu.
+**Matrice de test obligatoire** (les deux pages, surfaces fermées ET ouvertes :
+pop-up, tiroir, feuilles) — téléphones portrait 320×568, 360×740, 375×667,
+390×844, 414×896, 430×932 ; téléphones paysage 667×375, 844×390 ; tablettes
+portrait 600×960, 768×1024, 820×1180 ; tablettes paysage 1024×768,
+1180×820 ; portables 1280×720, 1366×768, 1440×900 ; bureau 1920×1080 ;
++ zoom 200 % (reflow sans scroll horizontal à 320 px CSS).
+Critères durs : `scrollWidth ≤ innerWidth` partout, aucun contenu rogné,
+cibles tactiles ≥ 44×44 px sur les paliers tactiles, texte lisible.
 
-Structure unifiée : le **calendrier vit dans une pop-up modale** (`#calPanel`,
-`role="dialog"`, focus géré par `gererModale()`), ouverte par une **carte
-déclencheur** (« Modifier le calendrier » + compteur de jours cochés dérivé de
-`recalculer()`). Le **contenu du document** (infos, estimation, commentaire,
-signatures, tableau PDF) occupe la **pleine largeur** : une colonne en mobile,
-**deux colonnes internes** (`.lay-grid`) sur grand écran. Une seule logique —
-pas de vue mobile/desktop séparée à maintenir.
+### Animations & fluidité
+Uniquement `transform` / `opacity` (60 fps), durées 150–320 ms, easing unique
+`--ease` = `cubic-bezier(.22,.61,.27,1)`. Aucun décalage de mise en page (CLS).
+`prefers-reduced-motion: reduce` → animations coupées. Pas de transition
+inter-documents (CSP, cf. §2) : fondu d'entrée de page + transitions internes
+via `document.startViewTransition` (amélioration progressive).
 
-Paliers : `≤389` (petit téléphone, hexagone resserré), `≤560` (colonnes → 1),
-`≤699` (téléphone : pop-up calendrier plein écran glissant + fiche du jour en
-feuille basse), `≥1000` (contenu en 2 colonnes internes), `≥1280`, `≥1600`
-(ultra-large), + garde « paysage court ». **Zéro débordement horizontal** à
-tous les paliers (`scrollWidth ≤ innerWidth`), pop-up ouverte comme fermée.
-
-### Impression / PDF
-Réagencement vers l'ordre document (infos → tableau liste → total → commentaire
-→ signatures) en A4 portrait, avec **auto-fit** (zoom mesuré pour tenir sur une
-page). Le calendrier-grille est masqué à l'impression au profit du tableau
-liste (`.print-table`, généré depuis l'état). Colonnes du tableau, de gauche à
-droite : **Matin · Après-midi · Date · Activité réalisée**. Les jours **non
-cochés** (`tr.nc`) sont grisés d'une teinte **distincte** du week-end (`tr.we`).
+### Impression / PDF (CRA)
+Ordre document (infos → tableau → total → commentaire → signatures), A4
+portrait, **auto-fit** une page. Le calendrier est masqué au profit du tableau
+`.print-table` (généré depuis l'état). Colonnes : **Matin · Après-midi · Date ·
+Activité réalisée**. Total imprimé (`#printTotalNum`). Jours non cochés
+(`tr.nc`) et week-ends (`tr.we`) en deux gris **transparents** distincts
+(laissent voir le filigrane). Mode **Provisoire** : filigrane, signatures
+masquées, total conservé.
 
 ## 5. Interdits
 
-- ❌ **Pas de framework / build / bundler / dépendance runtime.** Ça reste un
-  seul `index.html` auto-suffisant.
-- ❌ **Pas de valeur spécifique en dur** (société, client, consultant, TJM,
-  layout d'un cas précis). Le spécifique = paramétrable, optionnel, avec défaut.
-- ❌ **Pas de logique dupliquée** entre vue mobile et desktop. Un seul état,
-  des vues dérivées.
-- ❌ **Pas de seconde copie de l'état** à maintenir en parallèle de
-  `state.days` / `state`. Toujours dériver.
-- ❌ **Pas d'envoi de données**, pas d'endpoint externe, pas de télémétrie /
-  analytics. Les données restent locales ; la promesse de confidentialité est
-  intacte.
-- ❌ **Pas de `innerHTML` avec du contenu utilisateur non échappé**, pas de
-  `eval` / `new Function`. Le texte utilisateur (activités) est échappé
-  (`& < >`) avant insertion — garder cette règle ; préférer `textContent`.
-- ❌ **Pas de secret / clé en dur.**
-- ❌ **Ne pas casser** le responsive à jetons ni l'auto-fit une-page du PDF.
+- ❌ Framework, build, bundler, dépendance externe (CDN, police web, script
+  tiers). Fichiers statiques locaux uniquement.
+- ❌ Modules ES ; `<script>` / `<style>` inline ; attributs `style="…"` ;
+  gestionnaires `on…=` dans le HTML (CSP stricte, §8).
+- ❌ Code commun copié dans une page au lieu de `taf.css` / `taf.js`.
+- ❌ Valeur spécifique en dur (société, client, TJM, projet, objectif…).
+- ❌ Logique dupliquée mobile / desktop ; seconde copie d'un état.
+- ❌ Écrire dans la clé de stockage d'un autre module.
+- ❌ Envoi de données, endpoint externe, télémétrie.
+- ❌ `innerHTML` / `outerHTML` / `insertAdjacentHTML` avec une donnée
+  utilisateur ; `eval` / `new Function`.
+- ❌ Secret ou clé en dur.
+- ❌ Casser le responsive, l'auto-fit une-page du PDF ou une fonction du §9.
 
-## 6. Accessibilité — acquis à ne pas régresser
+## 6. Accessibilité — WCAG 2.2 AA, acquis à ne pas régresser
 
-- Focus visible net (`:focus-visible`, anneau accent), respect de
-  `prefers-reduced-motion`.
-- Cibles tactiles ≥ 44×44px (créneaux, pastille journée complète, boutons de
-  la fiche du jour).
-- **États encodés par la forme, pas seulement la couleur** : la pastille
-  hexagone « journée complète » est tri-état (vide / demie / pleine) lisible en
-  niveaux de gris. Ne pas retomber sur « couleur seule ».
-- `aria-pressed` / `aria-label` sur les contrôles du calendrier, `aria-hidden`
-  géré sur les feuilles/tiroirs. Compléter (landmarks, `aria-current`,
-  `aria-live`) sans ajouter d'ARIA là où le HTML natif suffit.
-- Viser WCAG 2.2 AA sur le contraste, sans casser l'identité visuelle.
+- Focus visible net (`:focus-visible`, anneau accent) ; `prefers-reduced-motion`.
+- Cibles tactiles ≥ 44×44 px.
+- États encodés par la **forme**, pas seulement la couleur (pastille hexagone
+  tri-état…).
+- Surfaces modales : `role="dialog"`, `aria-modal`, focus déplacé / piégé /
+  restitué (`gererModale`), Escape ferme la surface la plus haute.
+- `aria-live` pour les résultats d'action (pas d'annonce chaque seconde pour un
+  chronomètre) ; `aria-current` (module actif, jour courant) ; landmarks.
+- Contraste AA sur tous les accents personnalisés (`--on-accent` calculé).
 
 ## 7. Conventions
 
-- **UI et code en français** (libellés, commentaires, noms de fonctions :
-  `construireGrille`, `definirCreneau`, `recalculer`…). S'y conformer.
-- Formats **fr-FR** : demi-journée = `0,5 j`, montants via
-  `toLocaleString('fr-FR', {currency:'EUR'})`, dates `jj/mm/aaaa` à l'impression.
-- Une demi-journée cochée = 0,5 j ; matin = moitié gauche, après-midi = moitié
-  droite ; semaine commençant le **lundi**.
-- Un CRA = **un mois affiché à la fois**. Changer de mois/année **archive** le
-  mois courant dans `state.archive` (localStorage) puis charge le mois demandé —
-  l'historique n'est plus détruit (feature archive multi-mois). `state.days`
-  reste la seule vérité du mois affiché.
+- **UI et code en français** (`construireGrille`, `definirCreneau`,
+  `recalculer`…).
+- Formats **fr-FR** : demi-journée `0,5 j` ; montants
+  `toLocaleString('fr-FR', {style:'currency', currency:'EUR'})` ; dates
+  `jj/mm/aaaa` à l'impression ; heures 24 h `HH:MM` ; durées `7 h 30`
+  (décimal `7,5 h` dans les exports).
+- Semaine commençant le **lundi**. Matin = avant la coupure (défaut 13:00),
+  après-midi = après.
+- CRA : un mois affiché à la fois ; changer de période **archive** le mois
+  courant (`state.archive`) puis charge le mois demandé.
+
+## 8. Sécurité — maximum
+
+- **CSP meta identique sur chaque page**, sans `'unsafe-inline'` ni
+  `'unsafe-eval'` :
+  `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; require-trusted-types-for 'script'; trusted-types 'none'`
+  (toute exception doit être justifiée et minimale ; vérifié : `'self'`
+  fonctionne en `file://` sous Chrome). Styles dynamiques **uniquement via
+  CSSOM** (`el.style.setProperty`, variables CSS) — jamais de `<style>` créé
+  dynamiquement.
+- **Trusted Types `'none'`** : aucun puits HTML (`innerHTML`, `outerHTML`,
+  `insertAdjacentHTML`, `DOMParser`…) n'est utilisable à l'exécution sous
+  Chromium — le DOM se construit par `createElement` / `createElementNS` /
+  `textContent` (SVG à partir de constantes).
+- DOM : création d'éléments + `textContent` ; balisage HTML seulement pour des
+  constantes statiques du code (ex. SVG `MARKS`).
+- **Toute donnée lue est non fiable** (localStorage, fichier importé) :
+  `JSON.parse` en `try/catch`, validation de forme et de type, **clés validées
+  par regex** (jour 1–31, date `AAAA-MM-JJ`, `HH:MM`…) — jamais d'affectation
+  sur une clé non validée (pollution de prototype : `__proto__`,
+  `constructor`, `prototype`).
+- Export CSV : neutraliser l'injection de formules (cellule commençant par
+  `= + - @` tabulation ou retour → préfixe `'`), échapper `"`.
+- Bornes : longueur max des textes, taille max des images (logo, signatures),
+  gestion propre du quota (témoin de sauvegarde).
+- Aucun secret, aucune sortie réseau, pas de télémétrie. `referrer` :
+  `no-referrer`.
+- Fichiers internes (`CLAUDE.md`, `docs/`, `tests/`, `.claude/`) : ne pas les
+  publier sur le site (exclusion Jekyll via `_config.yml`, à versionner avec le
+  reste). Le dépôt étant public, ils restent lisibles sur github.com.
+- **Hébergement** : ne jamais activer GitHub Pages sur un autre dépôt du compte
+  (il serait servi sous `benderm27.github.io/<dépôt>/`, donc sur la **même
+  origine** que TAF, avec un accès complet à ses `localStorage`).
+- **Anti-cadre** : `frame-ancestors` est ignoré en `<meta>` et GitHub Pages
+  n'envoie pas d'en-tête : `taf.js` neutralise l'application si elle est
+  affichée dans un cadre (aucune écriture possible).
+
+## 9. Non-régression — checklist
+
+**CRA** (à revérifier après toute modification) :
+1. Carte déclencheur « Modifier le calendrier » + compteur → pop-up calendrier ;
+   créneaux matin / après-midi ; pastille hexagone tri-état ; clic-glissé
+   (souris) ; fiche du jour mobile (feuille basse, glisser pour fermer).
+2. Aides : activité par défaut + Appliquer, Jours ouvrés, Tout décocher,
+   modèles d'activité (+ Modèle, puces, suppression).
+3. Total, estimation (TJM / charges).
+4. Infos, titre du document, commentaire, signatures (dessin, import, glisser-
+   déposer, effacer, nom / date).
+5. Mois / année + archive multi-mois.
+6. Export / import JSON (validation, confirmation, ancien et nouveau format).
+7. Témoin de sauvegarde (succès / échec / indisponible).
+8. Annonces `aria-live` (`#liveRegion`, `#calLiveRegion`).
+9. Focus piégé (fiche, tiroir, calendrier) ; Escape ferme la surface du dessus.
+10. Profils d'identité (enregistrer / appliquer / supprimer).
+11. Mention Provisoire (badge écran, filigrane PDF, signatures masquées).
+12. PDF : tableau Matin · Après-midi · Date · Activité, total imprimé, gris
+    transparents `we` / `nc`, auto-fit une page, dates `jj/mm/aaaa`, titre /
+    commentaire vides masqués.
+13. Apparence : accent (swatches + sélecteur, encre lisible), icône / logo,
+    motif — désormais partagée entre les modules.
+14. Effacer mes données.
+
+**Heures** : voir la checklist de `docs/heures-spec.md`.
+
+## 10. Tests
+
+- `tests/index.html` : tests unitaires des fonctions pures (durées, découpe à
+  minuit, conversion heures → demi-journées, échappement CSV, validateurs,
+  migration). **Ne touchent jamais les vraies clés `localStorage`** (stockage
+  en mémoire simulé).
+- Playwright sur `http://` (le MCP bloque `file://`) : matrice responsive §4,
+  parcours complets, rendu print (`browser_emulate_media`), console sans erreur
+  et sans violation CSP.
+- Vérification `file://` sous Chrome : `chrome --headless=new --dump-dom
+  file:///…/index.html` → le DOM généré (grille, etc.) doit être présent.
