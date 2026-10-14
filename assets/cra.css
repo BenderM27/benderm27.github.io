@@ -1,0 +1,585 @@
+/* ============================================================================
+   TAF — MODULE CRA, STYLES ÉCRAN (assets/cra.css)
+   Spécifique au compte rendu d'activité. S'appuie sur les jetons et
+   composants de assets/taf.css (chargé avant). Les règles d'impression du
+   document vivent dans assets/cra-print.css (lié en media="print" : c'est
+   cette feuille que l'auto-fit bascule en media="all" le temps de mesurer).
+   Sections :
+      1. Jetons du calendrier       9. Total
+      2. Structure du document     10. Estimation de revenu
+      3. Carte déclencheur         11. Commentaire
+      4. Informations              12. Signatures
+      5. Aides de remplissage      13. Fiche du jour + tiroir (CRA)
+      6. Calendrier (grille)       14. Tableau PDF (masqué à l'écran)
+      7. Pop-up calendrier         15. Système responsive continu
+      8. Pont Heures → CRA         16. Mouvement réduit
+============================================================================ */
+
+/* ============================================================
+   1. JETONS DU CALENDRIER — pilotent la taille des cellules, du petit
+      téléphone à l'ultra-large (recalculés par paliers, section 15).
+      Ne pas figer ces tailles ailleurs.
+============================================================ */
+:root{
+  --cell-min:66px;   /* hauteur mini d'une cellule (= ligne de grille) */
+  --slot-h:48px;     /* hauteur d'un créneau matin/après-midi (cible tactile ≥44px) */
+  --num-size:13px;   /* taille du numéro de jour */
+  --full-size:27px;  /* taille visuelle de la pastille « journée complète » */
+  --full-cible:44px; /* zone cliquable visée pour la pastille (WCAG 2.5.8 : cibles ≥ 44 px) */
+}
+body.painting, body.painting *{ -webkit-user-select:none !important; user-select:none !important; }
+
+/* ============================================================
+   2. STRUCTURE DU DOCUMENT
+============================================================ */
+.sheet{ width:100%; max-width:1360px; min-width:0; }
+
+.doc-head{ display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:14px 24px; padding:0 4px; }
+.doc-head .lead{ flex:1 1 260px; min-width:220px; }
+.doc-brand{ display:flex; align-items:center; gap:9px; margin:0 0 9px; flex-wrap:wrap; }
+.doc-brand .mark-slot{ width:22px; height:24px; }
+/* Badge « Provisoire » à l'écran — piloté par body.provisoire, texte + forme (pas couleur seule) */
+.prov-badge{ display:none; align-items:center; gap:5px; font-size:9.5px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; color:var(--danger-ink); background:#FFF1EC; border:1px solid color-mix(in srgb, var(--danger) 32%, #fff); border-radius:99px; padding:2px 9px; white-space:nowrap; }
+.prov-badge::before{ content:""; width:6px; height:6px; border-radius:50%; background:var(--danger); flex:0 0 auto; }
+body.provisoire .prov-badge{ display:inline-flex; }
+/* Filigrane « Provisoire » — masqué à l'écran, révélé à l'impression via body.provisoire */
+.prov-watermark{ display:none; }
+.title-input{ font-family:var(--font); font-weight:730; letter-spacing:-.03em; font-size:clamp(21px,3vw,29px); color:var(--ink); line-height:1.08; border:none; outline:none; background:transparent; padding:0; width:100%; border-radius:6px; }
+.title-input::placeholder{ color:var(--faint); }
+.title-input:focus-visible{ outline:2.5px solid var(--accent); outline-offset:3px; }
+.period{ display:flex; align-items:center; gap:8px; padding-bottom:3px; }
+
+.workspace{ margin-top:16px; display:flex; flex-direction:column; gap:18px; }
+.col{ min-width:0; }
+
+/* Disposition interne du contenu pleine largeur. Défaut (mobile) : une colonne.
+   Grand écran : deux colonnes internes (section 15). */
+.lay-grid{ display:flex; flex-direction:column; gap:22px; }
+.lay-a, .lay-b{ display:flex; flex-direction:column; gap:20px; min-width:0; }
+
+/* ============================================================
+   3. CARTE DÉCLENCHEUR DE LA POP-UP CALENDRIER
+      Action principale du contenu. Compteur #synthDays dérivé de
+      recalculer().
+============================================================ */
+.cal-trigger{ display:flex; width:100%; align-items:center; gap:14px; text-align:left; padding:15px 17px; margin:0 0 clamp(18px,2.4vw,26px); border:1px solid var(--accent-edge); border-radius:var(--radius-md); cursor:pointer; font-family:var(--font); color:var(--ink); background:linear-gradient(180deg, var(--accent-fill-2), color-mix(in srgb, var(--accent) 4%, #fff)); box-shadow:var(--shadow-soft); -webkit-tap-highlight-color:transparent; transition:transform .12s var(--ease), box-shadow .16s var(--ease), border-color .16s var(--ease); }
+.cal-trigger:hover{ border-color:var(--accent); box-shadow:0 6px 18px -8px color-mix(in srgb, var(--accent) 55%, transparent); }
+.cal-trigger:active{ transform:translateY(1px); }
+.cal-trigger:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; box-shadow:var(--focus-halo); }
+.cal-trigger .ct-ic{ flex:0 0 auto; width:42px; height:42px; display:grid; place-items:center; border-radius:11px; color:var(--on-accent); background:linear-gradient(180deg, var(--accent-top), var(--accent)); box-shadow:0 1px 2px rgba(20,18,8,.25), inset 0 1px 0 rgba(255,255,255,.35); }
+.cal-trigger .ct-text{ display:flex; flex-direction:column; gap:2px; min-width:0; flex:1 1 auto; }
+.cal-trigger .ct-title{ font-size:15px; font-weight:700; letter-spacing:-.01em; color:var(--ink); }
+.cal-trigger .ct-sub{ font-size:12.5px; color:var(--muted); }
+.cal-trigger .ct-sub .ct-count{ color:var(--accent-deep); font-weight:750; font-variant-numeric:tabular-nums; }
+/* État vide : on invite au clic sans masquer le compteur (0 j) */
+.cal-trigger .ct-sub[data-empty="1"]{ font-size:0; }
+.cal-trigger .ct-sub[data-empty="1"] .ct-count{ font-size:12.5px; }
+.cal-trigger .ct-sub[data-empty="1"]::after{ content:" — touchez pour commencer"; font-size:12.5px; color:var(--muted); }
+.cal-trigger .ct-go{ flex:0 0 auto; color:var(--accent-deep); opacity:.7; display:inline-flex; transition:transform .16s var(--ease), opacity .16s var(--ease); }
+.cal-trigger:hover .ct-go{ transform:translateX(2px); opacity:1; }
+
+/* En-tête de la pop-up calendrier : icône + titre du mois + « Terminé » */
+.cal-modal-head{ display:flex; align-items:center; gap:10px; padding:16px 4px 14px; border-bottom:1px solid var(--line); margin-bottom:14px; flex:0 0 auto; }
+.cal-modal-head .cal-ic{ color:var(--accent); display:inline-flex; flex:0 0 auto; }
+.cal-modal-head .cal-title{ font-size:16px; font-weight:750; letter-spacing:-.01em; flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cal-modal-head .cal-title:focus{ outline:none; }
+.cal-modal-head .btn{ flex:0 0 auto; }
+
+/* ============================================================
+   4. INFORMATIONS (grille 2 colonnes → 1 en mobile)
+============================================================ */
+.info{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px 28px; }
+
+/* ============================================================
+   5. AIDES DE REMPLISSAGE (dans la pop-up calendrier)
+============================================================ */
+.aids{ padding:10px 12px; background:linear-gradient(180deg, var(--paper-2), #F4F6F8); border:1px solid var(--line); border-radius:var(--radius-md); display:flex; flex-direction:column; gap:10px; }
+.aids-bar{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.aids-toggle{ margin-left:auto; }
+@media screen and (max-width:479px){ .aids-opt{ display:none; } }
+.aids-toggle .chev{ transition:transform .2s var(--ease); }
+.aids-toggle[aria-expanded="true"] .chev{ transform:rotate(180deg); }
+.aids-plus{ display:flex; flex-wrap:wrap; align-items:center; gap:9px 12px; padding-top:10px; border-top:1px solid var(--line-2); animation:cra-deplier .22s var(--ease) both; }
+@keyframes cra-deplier{ from{ opacity:0; transform:translateY(-4px); } to{ opacity:1; transform:none; } }
+.aids .grp{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; flex:1 1 100%; }
+/* Astuce d'état vide (aucun jour coché) : guide la première utilisation, puis s'efface */
+.cal-astuce{ display:none; margin:0 0 10px; padding:8px 12px; border-radius:10px; background:var(--accent-fill-2); border:1px solid var(--accent-edge); color:var(--ink-soft); font-size:12.5px; line-height:1.45; flex:0 0 auto; animation:taf-fondu .2s var(--ease) both; }
+.cal-astuce b{ color:var(--accent-deep); }
+#calPanel[data-vide="1"] .cal-astuce{ display:block; transition:opacity .2s var(--ease); }
+/* Premier jour coché pendant l'édition : l'astuce s'estompe sans quitter le flux (zéro CLS). */
+#calPanel.astuce-lue .cal-astuce{ opacity:.45; }
+/* Champ « activité par défaut » : composant .taf-input (taf.css) + sa place dans la barre */
+.def-act{ flex:1 1 180px; }
+.hint{ flex-basis:100%; font-size:11.5px; color:var(--muted); margin:2px 0 0; line-height:1.5; }
+.hint b{ color:var(--ink-soft); font-weight:600; }
+
+/* Modèles d'activité (presets) — dérivent de state.presets */
+.presets{ flex-basis:100%; display:flex; flex-wrap:wrap; align-items:center; gap:7px; min-width:0; }
+.preset-add{ display:inline-flex; align-items:center; gap:5px; flex:0 0 auto; font-family:var(--font); font-size:12px; font-weight:600; color:var(--muted); background:var(--paper); border:1px dashed var(--line-3); border-radius:99px; padding:5px 11px; cursor:pointer; transition:border-color .16s var(--ease), color .16s var(--ease), background .16s var(--ease); }
+.preset-add:hover{ border-color:var(--accent-edge); color:var(--accent-deep); background:var(--accent-fill-2); }
+.preset-add:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; }
+.preset-add svg{ flex:0 0 auto; }
+.preset-empty{ font-size:11.5px; color:var(--muted); flex:1 1 auto; min-width:0; }
+.preset-list{ display:contents; }
+.preset-chip{ display:inline-flex; align-items:center; gap:2px; flex:0 1 auto; max-width:100%; min-width:0; background:var(--accent-fill-2); border:1px solid var(--accent-edge); border-radius:99px; padding:0 3px 0 0; overflow:hidden; animation:taf-fondu .2s var(--ease) both; }
+.preset-fill{ font-family:var(--font); font-size:12px; font-weight:600; color:var(--accent-deep); background:transparent; border:none; padding:5px 3px 5px 11px; cursor:pointer; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.preset-fill:hover{ text-decoration:underline; }
+.preset-fill:focus-visible{ outline:2.5px solid var(--accent); outline-offset:1px; border-radius:99px; }
+.preset-del{ flex:0 0 auto; width:20px; height:20px; display:inline-grid; place-items:center; border:none; background:transparent; color:var(--accent-deep); opacity:.6; border-radius:50%; cursor:pointer; padding:0; transition:opacity .14s var(--ease), background .14s var(--ease); }
+.preset-del:hover{ opacity:1; background:color-mix(in srgb, var(--accent) 18%, #fff); }
+.preset-del:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; opacity:1; }
+.preset-del svg{ width:11px; height:11px; }
+
+/* ============================================================
+   6. CALENDRIER — PIÈCE MAÎTRESSE (grille écran)
+      Chaque jour : numéro, deux créneaux (gauche = matin, droite =
+      après-midi), pastille hexagone « journée complète », activité.
+============================================================ */
+.calendar{ display:flex; flex-direction:column; min-height:0; }
+.cal-weekdays{ display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); border:1px solid var(--line-2); border-bottom:none; border-radius:var(--radius-md) var(--radius-md) 0 0; overflow:hidden; background:var(--paper-2); flex:0 0 auto; }
+.cal-weekdays span{ text-align:center; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); font-weight:700; padding:9px 4px; border-right:1px solid var(--line); }
+.cal-weekdays span:last-child{ border-right:none; }
+.cal-weekdays span.we{ color:var(--faint); }
+
+.cal-grid{ display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); grid-auto-rows:minmax(var(--cell-min),1fr); border:1px solid var(--line-2); border-radius:0 0 var(--radius-md) var(--radius-md); overflow:hidden; background:var(--line); min-height:0; }
+.cell{ position:relative; background:var(--paper); border-right:1px solid var(--line); border-bottom:1px solid var(--line); display:flex; flex-direction:column; gap:5px; padding:7px 8px 8px; min-width:0; transition:background .16s var(--ease); }
+.cell:nth-child(7n){ border-right:none; }
+.cal-grid .cell:nth-last-child(-n+7){ border-bottom:none; }
+.cell.empty{ background:repeating-linear-gradient(135deg, var(--paper-2) 0 7px, #F7F8F7 7px 14px); }
+.cell.we:not(.empty){ background:var(--paper-2); }
+.cell.sel{ background:#fff; }
+
+.cell-top{ display:flex; align-items:center; gap:5px; min-height:22px; }
+.num, .day-tot{ pointer-events:none; }   /* simples libellés : un toucher sur le numéro atteint .cell-tap (fiche du jour) */
+.num{ flex:0 0 auto; font-size:var(--num-size); font-weight:700; font-variant-numeric:tabular-nums; color:var(--ink-soft); letter-spacing:-.01em; }
+.cell.we .num{ color:var(--faint); }
+.cell.today .num{ color:var(--on-accent); background:linear-gradient(180deg, var(--accent-top), var(--accent)); width:23px; height:23px; display:inline-flex; align-items:center; justify-content:center; border-radius:7px; box-shadow:0 1px 2px rgba(20,18,8,.3); }
+.day-tot{ font-size:10px; font-weight:750; color:var(--accent-deep); font-variant-numeric:tabular-nums; opacity:0; transition:opacity .15s var(--ease); }
+.cell.sel .day-tot{ opacity:1; }
+
+/* Les deux créneaux. z-index:4 → au-dessus de la surface tactile .cell-tap ET de la cible
+   élargie de la pastille : un toucher sur un créneau va toujours au créneau. */
+.cell-slots{ position:relative; z-index:4; display:grid; grid-template-columns:1fr 1fr; height:var(--slot-h); border:1px solid var(--line-2); border-radius:8px; overflow:hidden; background:#fff; flex:0 0 auto; }
+.slot{ position:relative; border:none; background:#fff; cursor:pointer; padding:0; transition:background .18s var(--ease); outline:none; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+.slot.am{ border-right:1px solid var(--line-2); }
+.slot::after{ content:attr(data-l); position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--faint); opacity:0; transition:opacity .15s var(--ease); pointer-events:none; }
+.cell:hover .slot::after{ opacity:.85; }
+.slot:hover{ background:var(--accent-fill-2); }
+.slot.on{ background:linear-gradient(180deg, color-mix(in srgb, var(--accent) 26%, #fff), var(--accent-fill)); }
+.slot.on::after{ color:var(--accent-deep); opacity:.9; }
+.slot.on:hover{ background:var(--accent-fill); }
+/* Anneau de focus du créneau : accent + liseré sombre intérieur (WCAG 1.4.11). */
+.slot:focus-visible{ box-shadow:inset 0 0 0 2.5px var(--accent), inset 0 0 0 4px rgba(16,18,24,.5); }
+.cell.sel .cell-slots{ border-color:var(--accent-edge); }
+
+/* Pastille « journée complète » — hexagone tri-état (vide / demie / pleine),
+   encodé par la FORME du remplissage, lisible en niveaux de gris. */
+.cell-full{ position:relative; z-index:3; margin-left:auto; flex:0 0 auto; width:var(--full-size); height:var(--full-size); padding:0; border:none; background:transparent; cursor:pointer; display:inline-grid; place-items:center; -webkit-tap-highlight-color:transparent; touch-action:manipulation; transition:opacity .16s var(--ease), transform .12s var(--ease); }
+/* Cible élargie (≈44×44 dès que la cellule le permet) SANS déborder sur la cellule voisine :
+   à droite et en haut, l'extension s'arrête au padding de la cellule ; vers le bas, elle passe
+   SOUS les créneaux (z-index 4) qui gardent la priorité. Cellules étroites : section 15. */
+.cell-full::after{ content:""; position:absolute; top:-6px; right:-6px;
+  bottom:min(0px, calc(var(--full-size) + 6px - var(--full-cible))); left:min(0px, calc(var(--full-size) + 6px - var(--full-cible))); }
+/* Hexagone tri-état (.cf-hex) : composant COMMUN aux deux modules (grille du CRA, aperçu de
+   l'import, ruche et vues d'Heures) — défini une seule fois dans taf.css (section 9 bis). */
+.cell-full:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; border-radius:6px; box-shadow:var(--focus-halo); }
+.cell-full[data-state="empty"]:focus-visible{ opacity:1; }
+.cell-full:active{ transform:scale(.88); }
+@media (hover:hover) and (pointer:fine){
+  .cell:not(:hover):not(:focus-within) .cell-full[data-state="empty"]{ opacity:.4; }
+  .cell-full:hover[data-state="empty"] .cf-hex{ background:var(--accent-edge); }
+}
+
+/* Activité éditable en bas de cellule (bureau) */
+.cell-act{ font-size:11.5px; line-height:1.35; color:var(--ink); outline:none; min-height:17px; overflow-wrap:anywhere; transition:color .15s var(--ease); }
+.cell-act:empty::before{ content:attr(data-placeholder); color:var(--faint); }
+/* Hors édition : 3 lignes max (rangées compactes) ; au focus, texte complet éditable. Le PDF imprime tout. */
+.cell-act:not(:focus){ display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; line-clamp:3; overflow:hidden; }
+.cell:not(.sel) .cell-act{ visibility:hidden; pointer-events:none; }
+.cell.sel .cell-act:hover{ color:var(--accent-deep); }
+.cell.sel .cell-act:focus-visible{ box-shadow:0 0 0 2px var(--accent-ring); border-radius:4px; }
+
+/* Surface tactile (mobile/tablette) : ouvre la fiche du jour, SOUS les créneaux (z1). */
+.cell-tap{ display:none; position:absolute; inset:0; z-index:1; border:none; background:transparent; cursor:pointer; padding:0; -webkit-tap-highlight-color:transparent; }
+.cell-tap:focus-visible{ outline:2.5px solid var(--accent); outline-offset:-3px; }
+
+/* ============================================================
+   7. POP-UP CALENDRIER (modale universelle)
+      Base = panneau plein écran glissant (mobile) ; ≥700px = boîte
+      flottante centrée (section 15). Fermée : hors flux, translatée,
+      et visibility:hidden → hors de l'ordre de tabulation.
+============================================================ */
+body.cal-open{ overflow:hidden; }
+.col-right{ position:fixed; inset:0; z-index:var(--z-modal); background:var(--paper); transform:translateY(100%); visibility:hidden; transition:transform .32s var(--ease), visibility 0s linear .32s; display:flex; flex-direction:column; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain;
+  padding-inline:max(clamp(12px,3vw,20px), env(safe-area-inset-left)) max(clamp(12px,3vw,20px), env(safe-area-inset-right));
+  padding-block:env(safe-area-inset-top) max(12px, env(safe-area-inset-bottom)); }
+.col-right.open{ transform:none; visibility:visible; transition:transform .32s var(--ease), visibility 0s; }
+.col-right .aids{ flex:0 0 auto; margin-bottom:12px; }
+/* Défilement borné par .calendar (jamais la page), vertical uniquement ; en-tête des
+   jours collant dans le même conteneur → même largeur de colonne que la grille. */
+.col-right .calendar{ flex:1 1 auto; min-height:min(38vh, 240px); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; scrollbar-width:thin; }
+/* Si l'utilisateur déplie les aides sur un écran bas, la grille garde cette hauteur minimale
+   et c'est la pop-up entière qui défile (jamais la page derrière). */
+.col-right .cal-weekdays{ position:sticky; top:0; z-index:6; }   /* au-dessus des créneaux (4) et des pastilles (3) au défilement */
+/* La grille ne se comprime JAMAIS (sinon les rangées tombent à --cell-min et les créneaux
+   débordent sur la rangée suivante) : c'est .calendar qui défile quand la place manque. */
+.col-right .cal-grid{ flex:0 0 auto; }
+.col-right .total-bar{ flex:0 0 auto; margin-top:12px; }
+/* Sous le dialogue d'import, la pop-up est inerte (inert) : aucune interaction fantôme. */
+.col-right[inert]{ pointer-events:none; }
+
+/* ============================================================
+   8. PONT HEURES → CRA
+      Bouton « Depuis mes heures » (aides de la pop-up) + dialogue
+      « Importer mes heures » AU-DESSUS de la pop-up : plein écran
+      glissant < 700 px, boîte centrée de 560 px au-delà (section 15).
+      transform / opacity uniquement ; hauteur bornée, le corps défile.
+============================================================ */
+.from-hours{ gap:7px; }
+.from-hours svg{ color:var(--accent-deep); }
+.from-hours .fh-court{ display:none; }
+.fh-badge{ display:inline-grid; place-items:center; min-width:20px; height:20px; padding:0 6px; border-radius:99px; color:var(--on-accent); background:linear-gradient(180deg, var(--accent-top), var(--accent)); box-shadow:0 1px 2px rgba(20,18,8,.2); font-size:11px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+@media screen and (max-width:479px){ .from-hours .fh-long{ display:none; } .from-hours .fh-court{ display:inline; } }
+
+/* Dialogue « Importer mes heures » : surface commune .taf-feuille (taf.css) — feuille basse
+   < 700 px, boîte centrée au-delà. Seuls les ajustements propres au CRA vivent ici. */
+.ih-feuille{ --feuille-l:560px; }
+.ih-feuille .taf-feuille-pied{ flex-direction:column; align-items:stretch; }
+.ih-ic{ flex:0 0 auto; width:38px; height:38px; display:grid; place-items:center; border-radius:11px; color:var(--on-accent); background:linear-gradient(180deg, var(--accent-top), var(--accent)); box-shadow:0 1px 2px rgba(20,18,8,.25), inset 0 1px 0 rgba(255,255,255,.35); }
+.ih-titres{ flex:1 1 auto; min-width:0; }
+.ih-titres h2{ margin:0; font-size:16.5px; font-weight:750; letter-spacing:-.01em; line-height:1.25; }
+.ih-titres h2:focus{ outline:none; }
+.ih-periode{ margin:2px 0 0; font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
+.ih-contenu{ display:flex; flex-direction:column; gap:16px; min-width:0; animation:taf-fondu .2s var(--ease) both; }
+.ih-actions{ display:flex; justify-content:flex-end; gap:10px; }
+.ih-actions .btn{ min-height:44px; padding-inline:18px; }
+.ih-confirm{ margin:0; display:flex; align-items:center; gap:9px; padding:10px 12px; border-radius:10px; font-size:13px; font-weight:600; line-height:1.4; color:var(--danger-ink); background:var(--danger-fill); border:1px solid color-mix(in srgb, var(--danger) 30%, var(--line-2)); animation:cra-deplier .2s var(--ease) both; }
+.ih-confirm::before{ content:"!"; flex:0 0 auto; width:20px; height:20px; display:grid; place-items:center; border-radius:50%; background:var(--danger); color:#fff; font-size:12px; font-weight:800; }
+
+/* Synthèse : « 17 jours détectés → 16,5 j » + total du mois avant / après */
+/* Grille : les deux chiffres restent sur une ligne (leurs libellés passent à la ligne si besoin). */
+.ih-synthese{ margin:0; display:grid; grid-template-columns:minmax(0,max-content) auto minmax(0,1fr); align-items:start; gap:6px 14px; padding:14px 16px; border-radius:var(--radius-md); border:1px solid var(--accent-edge); background:linear-gradient(180deg, var(--accent-fill-2), color-mix(in srgb, var(--accent) 4%, #fff)); }
+.ih-chiffre{ display:flex; flex-direction:column; min-width:0; }
+.ih-chiffre b{ font-size:24px; font-weight:800; letter-spacing:-.02em; line-height:1.1; font-variant-numeric:tabular-nums; color:var(--ink); }
+.ih-chiffre span{ font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+.ih-fleche{ font-size:20px; line-height:26px; color:var(--accent-deep); font-weight:700; }
+.ih-synthese-note{ grid-column:1 / -1; font-size:12.5px; color:var(--ink-soft); line-height:1.45; }
+
+/* Rappel de la règle de conversion (réglages Heures) */
+.ih-regle{ display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; font-size:12.5px; color:var(--muted); line-height:1.45; }
+.ih-regle > svg{ flex:0 0 auto; color:var(--faint); }
+.ih-regle-txt{ flex:1 1 200px; min-width:0; }
+.ih-regle b{ color:var(--ink-soft); font-weight:650; font-variant-numeric:tabular-nums; }
+.ih-regle-lien{ flex:0 0 auto; }
+
+/* Modes : deux cartes radio (état par la bordure ET la pastille native, jamais la couleur seule) */
+.ih-modes{ margin:0; padding:0; border:0; min-width:0; display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px; }
+/* Cartes radio et case à cocher : composants communs .taf-option / .taf-case (taf.css). */
+
+/* Aperçu avant → après (une ligne par jour modifié) */
+.ih-apercu{ display:flex; flex-direction:column; gap:8px; min-width:0; }
+.ih-apercu-tete{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+.ih-apercu-tete h3{ margin:0; font-size:10.5px; letter-spacing:.11em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+.ih-compte{ font-size:12px; color:var(--ink-soft); font-weight:600; }
+.ih-legende{ margin-left:auto; font-size:11.5px; color:var(--faint); }
+.ih-liste{ list-style:none; margin:0; padding:0; border:1px solid var(--line-2); border-radius:12px; overflow:hidden; background:var(--paper); }
+.ih-ligne{ display:grid; grid-template-columns:minmax(58px,auto) auto minmax(0,1fr); grid-template-areas:"date etats duree" "act act act"; align-items:center; gap:3px 14px; padding:9px 14px; border-bottom:1px solid var(--line); animation:taf-fondu .2s var(--ease) both; }
+.ih-ligne:last-child{ border-bottom:none; }
+.ih-date{ grid-area:date; display:flex; align-items:baseline; gap:5px; }
+.ih-date .dn{ font-size:11px; color:var(--muted); text-transform:capitalize; }
+.ih-date .dd{ font-size:14px; font-weight:750; font-variant-numeric:tabular-nums; color:var(--ink); }
+.ih-etats{ grid-area:etats; display:inline-flex; align-items:center; gap:6px; }
+.ih-fl{ color:var(--faint); font-size:13px; }
+.ih-duree{ grid-area:duree; justify-self:end; font-size:12.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.ih-duree.aucune{ color:var(--faint); font-style:italic; }
+.ih-act{ grid-area:act; min-width:0; font-size:12px; color:var(--muted); line-height:1.4; overflow-wrap:anywhere; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2; overflow:hidden; }
+.ih-act b{ color:var(--accent-deep); font-weight:650; }
+.ih-a-jour{ margin:0; padding:14px 16px; border-radius:12px; border:1px dashed var(--line-3); color:var(--ink-soft); font-size:13.5px; text-align:center; }
+
+/* Autre mois demandé par le lien #heures-AAAA-MM */
+.ih-mois{ display:flex; flex-direction:column; align-items:flex-start; gap:12px; padding:16px; border:1px solid var(--line-2); border-radius:var(--radius-md); background:var(--paper-2); animation:taf-fondu .2s var(--ease) both; }
+.ih-mois-txt{ margin:0; font-size:15px; color:var(--ink-soft); }
+.ih-mois-txt b{ color:var(--ink); }
+.ih-mois-actions{ display:flex; flex-wrap:wrap; gap:8px; }
+.ih-note{ margin:0; font-size:12px; color:var(--muted); line-height:1.45; }
+
+/* Aucune heure / données illisibles */
+.ih-vide{ display:flex; flex-direction:column; align-items:center; text-align:center; gap:8px; padding:26px 12px; animation:taf-fondu .2s var(--ease) both; }
+.ih-vide-ic{ width:54px; height:54px; display:grid; place-items:center; border-radius:16px; color:var(--accent-deep); background:var(--accent-fill-2); border:1px solid var(--accent-edge); margin-bottom:4px; }
+.ih-vide-titre{ margin:0; font-size:16px; font-weight:750; color:var(--ink); }
+.ih-vide-texte{ margin:0 0 6px; font-size:13.5px; color:var(--muted); line-height:1.5; max-width:38ch; }
+
+/* ============================================================
+   9. TOTAL
+============================================================ */
+.total-bar{ display:flex; align-items:center; justify-content:space-between; gap:10px 16px; flex-wrap:wrap; border:1px solid var(--line-2); border-radius:var(--radius-md); padding:13px 17px; margin-top:14px; background:linear-gradient(180deg, #FFFFFF, var(--paper-2)); flex:0 0 auto; }
+.total-legend{ font-size:11.5px; color:var(--muted); display:inline-flex; align-items:center; gap:8px; }
+.total-legend .swatch{ width:14px; height:14px; border-radius:4px; background:var(--accent-fill); border:1.5px solid var(--accent-edge); }
+.total-legend b{ color:var(--ink-soft); font-weight:650; }
+.total-value{ display:flex; align-items:baseline; gap:9px; }
+.total-value .lab{ font-size:10.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+.total-value .num-tot{ font-size:30px; font-weight:800; letter-spacing:-.02em; font-variant-numeric:tabular-nums; color:var(--ink); padding-bottom:3px; border-bottom:3px solid var(--accent); transition:color .25s var(--ease); }
+.total-value .unit{ font-size:14px; font-weight:650; color:var(--ink-soft); }
+.num-tot.pulse{ animation:cra-pulse .5s var(--ease); }
+@keyframes cra-pulse{ 0%{ color:var(--accent-deep); } 100%{ color:var(--ink); } }
+
+/* ============================================================
+   10. ESTIMATION DE REVENU (hors PDF)
+============================================================ */
+.est{ border:1px solid var(--line-2); border-radius:var(--radius-md); padding:14px 16px; background:linear-gradient(180deg, var(--paper-2), #F5F7F8); }
+.est-head{ display:flex; align-items:center; gap:8px; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700; margin-bottom:12px; }
+.est-grid{ display:flex; flex-wrap:wrap; gap:12px 18px; align-items:flex-end; }
+.est-field{ display:flex; flex-direction:column; gap:5px; flex:1 1 120px; min-width:0; }
+.est-field label{ font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+/* Champs TJM / charges : composant .taf-input (taf.css), chiffres plus présents */
+.est-field .taf-input{ width:100%; font-weight:600; font-variant-numeric:tabular-nums; }
+.est-out{ display:flex; flex-wrap:wrap; gap:10px; margin-top:13px; }
+.est-card{ flex:1 1 105px; min-width:0; background:var(--paper); border:1px solid var(--line-2); border-radius:11px; padding:10px 13px; }
+.est-card .l{ font-size:10px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+.est-card .v{ font-size:18px; font-weight:750; letter-spacing:-.01em; font-variant-numeric:tabular-nums; margin-top:3px; overflow-wrap:anywhere; }
+.est-card.net{ background:color-mix(in srgb, var(--accent) 9%, #fff); border-color:var(--accent-edge); }
+.est-card.net .v{ color:var(--accent-deep); }
+.est-note{ font-size:11px; color:var(--muted); margin:11px 0 0; }
+
+/* ============================================================
+   11. COMMENTAIRE
+============================================================ */
+.comment-block{ display:flex; flex-direction:column; min-height:0; }
+.section-label{ font-size:10.5px; letter-spacing:.11em; text-transform:uppercase; color:var(--muted); font-weight:700; margin:0 0 9px; flex:0 0 auto; }
+.comment{ min-height:70px; border:1.5px solid var(--line-2); border-radius:var(--radius-sm); padding:13px 15px; outline:none; font-size:14px; color:var(--ink); line-height:1.55; white-space:pre-wrap; overflow-wrap:anywhere; overflow:auto; background:var(--paper); transition:border-color .16s var(--ease), box-shadow .16s var(--ease); }
+.comment:empty::before{ content:attr(data-placeholder); color:var(--faint); }
+.comment:hover{ border-color:var(--line-3); }
+.comment:focus{ border-color:var(--accent); box-shadow:0 0 0 3.5px var(--accent-ring); }
+
+/* ============================================================
+   12. SIGNATURES
+============================================================ */
+.signs{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:22px; flex:0 0 auto; }
+.sign-card{ display:flex; flex-direction:column; min-width:0; }
+.sign-role{ font-family:var(--font); font-size:13.5px; font-weight:700; color:var(--ink); letter-spacing:-.01em; border:none; border-bottom:1px solid transparent; background:transparent; padding:2px 0; outline:none; width:100%; min-width:0; border-radius:0; transition:border-color .16s var(--ease); }
+.sign-role:hover{ border-bottom-color:var(--line-2); }
+.sign-role:focus{ border-bottom-color:var(--accent); }
+.sign-zone{ position:relative; margin-top:10px; height:96px; border:1.5px dashed var(--line-3); border-radius:var(--radius-sm); overflow:hidden; background:var(--paper-2); transition:border-color .16s var(--ease), background .16s var(--ease); }
+.sign-zone.dragover{ border-color:var(--accent); background:color-mix(in srgb, var(--accent) 7%, #fff); }
+.sign-zone.has-ink{ border-style:solid; border-color:var(--line-2); }
+.sign-zone canvas{ position:absolute; inset:0; width:100%; height:100%; touch-action:none; cursor:crosshair; }
+.sign-empty{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:10px; font-size:11.5px; color:var(--muted); pointer-events:none; }
+.sign-zone.has-ink .sign-empty{ display:none; }
+.sign-actions{ display:flex; gap:8px; margin-top:9px; align-items:center; flex-wrap:wrap; }
+.sign-meta{ display:flex; gap:18px; margin-top:11px; }
+.sign-meta .mini{ display:flex; flex-direction:column; gap:4px; flex:1 1 0; min-width:0; }
+.sign-meta label{ font-size:9.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+.sign-meta input{ font-family:var(--font); font-size:13.5px; color:var(--ink); border:none; border-bottom:1.5px solid var(--line-2); background:transparent; padding:5px 2px; outline:none; min-width:0; width:100%; border-radius:0; transition:border-color .16s var(--ease); }
+.sign-meta input:focus{ border-bottom-color:var(--accent); }
+.sign-meta input[type=date]{ appearance:none; -webkit-appearance:none; min-height:32px; }
+.date-print{ display:none; }
+.foot-note{ font-size:11px; color:var(--muted); text-align:center; margin:4px 0 0; }
+
+/* ============================================================
+   13. FICHE DU JOUR (feuille basse) + COMPLÉMENTS DU TIROIR (CRA)
+============================================================ */
+/* Voile de la fiche : AU-DESSUS de la pop-up calendrier (la fiche s'y empile) */
+.overlay.overlay-fiche{ z-index:var(--z-sheet-overlay); }
+.day-sheet{ position:fixed; left:0; right:0; bottom:0; z-index:var(--z-sheet); max-height:calc(100% - 24px - env(safe-area-inset-top)); overflow-y:auto; background:var(--paper); border-radius:20px 20px 0 0; box-shadow:var(--shadow-pop); transform:translateY(100%); visibility:hidden; transition:transform .3s var(--ease), visibility 0s linear .3s; overscroll-behavior:contain;
+  padding-inline:max(18px, env(safe-area-inset-left)) max(18px, env(safe-area-inset-right));
+  padding-block:0 calc(18px + env(safe-area-inset-bottom)); }
+.day-sheet.open{ transform:none; visibility:visible; transition:transform .3s var(--ease), visibility 0s; }
+.day-sheet .grab-zone{ display:flex; justify-content:center; padding:6px 0 2px; cursor:grab; touch-action:none; }
+.day-sheet .grab-zone:active{ cursor:grabbing; }
+.day-sheet .grab{ width:42px; height:5px; border-radius:99px; background:var(--line-3); margin:6px auto 4px; }
+.day-sheet-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:6px 0 14px; }
+.day-sheet-head .dt{ font-size:16px; font-weight:750; letter-spacing:-.01em; min-width:0; }
+.day-sheet-head .dt:focus{ outline:none; }
+.day-full-btn{ width:100%; margin-bottom:10px; min-height:56px; display:flex; align-items:center; justify-content:center; gap:9px; font-family:var(--font); font-size:15.5px; font-weight:700; color:var(--ink); border:1.5px solid var(--line-2); border-radius:14px; background:var(--paper); cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent; transition:background .16s var(--ease), border-color .16s var(--ease), color .16s var(--ease); }
+.day-full-btn svg{ color:var(--line-3); transition:color .16s var(--ease); }
+.day-full-btn.on{ border-color:transparent; color:var(--on-accent); background:linear-gradient(180deg, var(--accent-top), var(--accent)); box-shadow:0 1px 2px rgba(20,18,8,.22), inset 0 1px 0 rgba(255,255,255,.35); }
+.day-full-btn.on svg{ color:var(--on-accent); }
+.day-full-btn:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; box-shadow:var(--focus-halo); }
+.seg{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.seg-btn{ font-family:var(--font); font-size:15px; font-weight:600; min-height:56px; padding:13px; border-radius:12px; border:1.5px solid var(--line-2); background:var(--paper); color:var(--ink-soft); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:7px; touch-action:manipulation; -webkit-tap-highlight-color:transparent; transition:background .16s var(--ease), border-color .16s var(--ease), color .16s var(--ease); }
+.seg-btn .dot{ width:9px; height:9px; border-radius:3px; border:1.5px solid var(--line-3); background:#fff; transition:background .16s var(--ease), border-color .16s var(--ease); }
+.seg-btn.on{ border-color:var(--accent-edge); background:var(--accent-fill-2); color:var(--accent-deep); }
+.seg-btn.on .dot{ background:linear-gradient(180deg, var(--accent-top), var(--accent)); border-color:var(--accent); }
+.seg-btn:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; box-shadow:var(--focus-halo); }
+.day-act-full{ display:block; width:100%; margin-top:12px; min-height:78px; resize:vertical; font-family:var(--font); font-size:16px; color:var(--ink); line-height:1.5; border:1.5px solid var(--line-2); border-radius:12px; padding:12px 13px; outline:none; background:var(--paper); transition:border-color .16s var(--ease), box-shadow .16s var(--ease); }
+.day-act-full::placeholder{ color:var(--faint); }
+.day-act-full:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-ring); }
+.day-sheet-foot{ margin-top:14px; display:flex; gap:10px; }
+.day-sheet-foot .btn{ flex:1 1 0; padding:13px; min-height:48px; }
+
+/* Tiroir : export / import, profils d'identité */
+.data-actions{ display:flex; flex-wrap:wrap; gap:9px; margin-top:12px; }
+.data-actions .btn{ flex:1 1 auto; min-width:0; }
+.dgroup-actions{ margin-top:14px; }
+.prof-add{ display:flex; gap:8px; margin-top:12px; align-items:stretch; }
+.prof-name{ flex:1 1 auto; }   /* composant .taf-input (taf.css) */
+.prof-add .btn{ flex:0 0 auto; }
+.prof-list{ display:flex; flex-direction:column; gap:8px; margin-top:12px; }
+.prof-list:empty{ display:none; }
+.prof-item{ display:flex; align-items:center; gap:10px; padding:9px 11px; border:1px solid var(--line-2); border-radius:11px; background:var(--paper-2); min-width:0; animation:taf-fondu .2s var(--ease) both; }
+.prof-item .pi-name{ flex:1 1 auto; min-width:0; font-size:13.5px; font-weight:600; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.prof-item .pi-actions{ display:flex; gap:6px; flex:0 0 auto; }
+.prof-item .btn.small{ padding:6px 10px; font-size:12px; }
+.prof-empty{ margin-top:10px; }
+
+/* ============================================================
+   14. TABLEAU PDF (liste) — masqué à l'écran, visible à l'impression
+============================================================ */
+.print-wrap{ display:none; }
+.print-table{ width:100%; border-collapse:collapse; table-layout:fixed; }
+.print-table col.c-am, .print-table col.c-pm{ width:12%; }
+.print-table col.c-date{ width:24%; }
+.print-table col.c-act{ width:52%; }
+.pbox{ display:inline-block; width:12px; height:12px; border:1px solid var(--line-3); border-radius:3px; vertical-align:middle; }
+.pbox.on{ background:linear-gradient(180deg, var(--accent-top), var(--accent)); border-color:color-mix(in srgb, var(--accent) 80%, #000); position:relative; }
+.pbox.on::after{ content:""; position:absolute; left:3.5px; top:1px; width:3.5px; height:7px; border:solid var(--on-accent); border-width:0 1.5px 1.5px 0; transform:rotate(45deg); }
+
+/* ============================================================
+   15. SYSTÈME RESPONSIVE CONTINU
+      Calendrier toujours en pop-up ; contenu pleine largeur en
+      colonnes internes sur grand écran. Dimensions de cellule
+      pilotées par --cell-min / --slot-h / --num-size / --full-size.
+============================================================ */
+
+/* Petits téléphones : cellules un cran plus basses */
+@media screen and (max-width:389px){
+  :root{ --cell-min:60px; --num-size:12px; }
+  .doc-head .lead{ min-width:0; }
+}
+/* Téléphones portrait (≤480px) : hexagone resserré pour tenir numéro + pastille dans 7
+   colonnes sans rogner le dimanche ; « aujourd'hui » marqué par la FORME (soulignement
+   d'accent épais) plutôt que par une pastille pleine qui ne tiendrait pas. */
+@media screen and (max-width:480px){
+  :root{ --full-size:22px; }
+  .cal-grid .cell{ padding:6px 4px 6px; }
+  .cal-grid .cell-top{ gap:2px; }
+  /* Cellule de ~46px : pas la place d'une cible de 44px sans recouvrir le numéro ou la voisine.
+     Cible ≈32×32 contenue dans la cellule ; l'équivalent ≥44px est le bouton « Journée
+     complète » (56px) de la fiche du jour, ouverte en touchant le numéro (WCAG 2.5.8). */
+  .cell-full::after{ top:-6px; right:-4px; bottom:-4px; left:-6px; }
+  .cell.today .num, .cal-grid .cell.today .num{ width:auto; height:auto; display:inline; background:none; box-shadow:none; border-radius:0; color:var(--accent-deep); text-decoration:underline; text-decoration-color:var(--accent); text-decoration-thickness:3px; text-underline-offset:3px; }
+}
+
+/* Grille tactile (téléphone + tablette) : la fiche du jour remplace l'édition en ligne */
+@media screen and (max-width:899px){
+  .cell-tap{ display:block; }
+  .cell-act, .cell-act:not(:focus){ display:none; }
+  .cell{ padding:6px 6px 7px; gap:4px; }
+  .slot::after{ display:none; }
+  .cell.today .num{ width:21px; height:21px; }
+}
+/* Paliers tactiles : toutes les cibles ≥44px de haut */
+@media screen and (max-width:899px), screen and (pointer:coarse){
+  .title-input, .sign-role, .sign-meta input, .sign-meta input[type=date]{ min-height:44px; }
+  .preset-add{ min-height:44px; font-size:13px; padding:0 14px; }
+  .preset-fill{ min-height:44px; font-size:14px; padding-top:0; padding-bottom:0; }
+  .preset-del{ width:44px; height:44px; }
+  .preset-chip{ padding-right:0; }
+}
+
+/* Téléphones (<700px) : pop-up calendrier plein écran, contenu en une colonne */
+@media screen and (max-width:699px){
+  .aids-bar > .btn{ flex:1 1 auto; }
+  .aids-toggle{ margin-left:0; }
+  .total-bar{ padding:9px 14px; margin-top:10px; justify-content:center; }
+  .total-legend{ display:none; }
+  .total-value .num-tot{ font-size:26px; }
+  .cal-modal-head{ padding:12px 2px 10px; margin-bottom:10px; }
+  .col-right .aids{ margin-bottom:10px; }
+  .cal-grid{ grid-auto-rows:minmax(var(--cell-min),auto); }
+  .info{ grid-template-columns:minmax(0,1fr); }
+  .signs{ grid-template-columns:minmax(0,1fr); }
+  .doc-head{ flex-direction:column; align-items:stretch; gap:12px; }
+  .doc-head .lead{ flex:0 0 auto; min-width:0; }
+  .period{ justify-content:flex-start; }
+  .period select.field{ flex:1 1 0; min-width:0; }
+  .day-tot{ display:none; }
+  .sign-meta input, .sign-role{ font-size:16px; }   /* évite le zoom iOS (champs .taf-input : taf.css) */
+  .ih-actions .btn{ flex:1 1 0; min-width:0; }
+  /* Pas de poignée de glissement sur ce dialogue : l'en-tête reprend de l'air en haut. */
+  .ih-feuille .taf-feuille-tete{ padding-top:14px; }
+}
+/* Petits écrans : modes d'import empilés */
+@media screen and (max-width:479px){
+  .ih-modes{ grid-template-columns:minmax(0,1fr); }
+  .ih-chiffre b{ font-size:22px; }
+}
+
+/* Tablette (≥700px) : contenu en feuille encadrée ; pop-up recentrée en boîte flottante */
+@media screen and (min-width:700px){
+  :root{ --cell-min:70px; --slot-h:44px; }
+  .est-field .taf-input{ font-size:15px; }
+  .col-left{ background:var(--paper); border:1px solid var(--line-2); border-radius:var(--radius); box-shadow:var(--shadow-sheet); padding:clamp(18px,2.4vw,28px); }
+  .col-right{ inset:auto; top:50%; left:50%; width:min(760px, calc(100vw - 48px)); max-height:min(92vh, 900px); max-height:min(92dvh, 900px); transform:translate(-50%, calc(-50% + 14px)); border-radius:var(--radius); box-shadow:var(--shadow-pop); border:1px solid var(--line-2); padding:0 clamp(18px,2.4vw,26px) clamp(18px,2.4vw,24px); opacity:0; transition:transform .26s var(--ease), opacity .22s var(--ease), visibility 0s linear .26s; }
+  .col-right.open{ transform:translate(-50%,-50%); opacity:1; transition:transform .26s var(--ease), opacity .22s var(--ease), visibility 0s; }
+  /* Fiche du jour en carte centrée-basse plutôt qu'en pleine largeur */
+  .day-sheet{ left:50%; right:auto; width:min(520px, calc(100vw - 48px)); margin-left:calc(min(520px, calc(100vw - 48px)) / -2); }
+}
+
+/* Bureau (≥900px) : cellules plus compactes, édition d'activité en ligne */
+@media screen and (min-width:900px){
+  :root{ --cell-min:66px; --slot-h:40px; --num-size:13px; --full-size:24px; }
+  .col-right{ width:min(880px, calc(100vw - 64px)); }
+}
+
+/* Grand écran (≥1000px) : deux colonnes internes équilibrées */
+@media screen and (min-width:1000px){
+  .lay-grid{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:clamp(24px,3vw,44px); align-items:start; }
+  .lay-a, .lay-b{ gap:22px; }
+}
+
+/* Ultra-large : feuille élargie et aérée */
+@media screen and (min-width:1600px){
+  .sheet{ max-width:1240px; }
+  .lay-grid{ gap:clamp(36px,3vw,60px); }
+  .col-right{ width:min(920px, calc(100vw - 80px)); }
+}
+
+/* Très petits téléphones (<344px) : grille pleine largeur dans la pop-up → cellules ≥44px
+   (7 colonnes sur 320px). Les aides, l'en-tête et le total gardent la gouttière. */
+@media screen and (max-width:343px){
+  :root{ --full-size:20px; }
+  .cal-grid .cell{ padding:6px 3px 6px; overflow:hidden; }   /* rien ne déborde sur la voisine */
+  .cell-full:focus-visible{ outline-offset:-1px; }
+  .col-right .calendar{ margin-inline:-12px; }
+  .col-right .cal-weekdays{ border-left:none; border-right:none; border-radius:0; }
+  .col-right .cal-grid{ border-left:none; border-right:none; border-radius:0; }
+}
+
+/* Pointeur tactile, quelle que soit la largeur (tablette couchée ≥900px comprise) :
+   créneaux ≥44px de haut (le jeton inclut la bordure de 1px de .cell-slots). */
+@media screen and (max-width:899px), screen and (pointer:coarse){
+  :root{ --slot-h:46px; }
+}
+
+/* Paysage court (≤699px de large, hauteur ≤560px) : on récupère du vertical */
+@media screen and (max-width:699px) and (orientation:landscape) and (max-height:560px){
+  .col-right .aids{ margin-bottom:8px; }
+  .col-right .aids .hint{ display:none; }
+  .cal-modal-head{ padding:8px 2px; margin-bottom:8px; }
+  .ih-feuille .taf-feuille-tete{ padding-block:8px; }
+  .ih-feuille .taf-feuille-corps{ gap:12px; padding-block:6px 14px; }
+  .ih-contenu{ gap:12px; }
+  .ih-feuille .taf-feuille-pied{ padding-block:8px calc(8px + env(safe-area-inset-bottom)); }
+}
+/* Boîte flottante sur écran bas (téléphone couché ≥700px, portable 720p) : la boîte prend
+   presque toute la hauteur, en-tête resserré, cellules un cran plus basses (créneaux ≥44px). */
+@media screen and (min-width:700px) and (max-height:620px){
+  :root{ --cell-min:62px; }
+  .col-right{ max-height:calc(100vh - 20px); max-height:calc(100dvh - 20px); }
+  .ih-feuille .taf-feuille-corps{ gap:12px; padding-block:6px 14px; }
+  .ih-contenu{ gap:12px; }
+  .col-right .aids{ margin-bottom:8px; }
+  .col-right .aids .hint{ display:none; }
+  .cal-modal-head{ padding:8px 2px; margin-bottom:8px; }
+  .total-bar{ padding:8px 14px; margin-top:8px; }
+  .total-legend{ display:none; }
+  .total-value .num-tot{ font-size:24px; }
+}
+
+/* ============================================================
+   16. MOUVEMENT RÉDUIT (complément du socle)
+============================================================ */
+@media (prefers-reduced-motion:reduce){
+  .cell-full:active{ transform:none !important; }
+}

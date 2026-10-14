@@ -1,0 +1,12 @@
+# GitHub Pages (Jekyll) — fichiers internes non publiés sur le site (CLAUDE.md §8).
+# Jekyll exclut déjà les fichiers commençant par « . » : les lister documente l'intention.
+# « *.md » : aucune page Markdown n'est servie (le site n'est fait que de HTML statique).
+exclude:
+  - CLAUDE.md
+  - "*.md"
+  - docs/
+  - tests/
+  - .claude/
+  - .mcp.json
+  - .playwright-mcp/
+  - .gitignore

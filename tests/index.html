@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Même CSP que les pages de TAF (CLAUDE.md §8), Trusted Types compris. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; require-trusted-types-for 'script'; trusted-types 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light">
+<title>TAF</title>
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/taf.css">
+<link rel="stylesheet" href="tests.css">
+<!-- taf.js : SANS data-module sur <body> → aucune initialisation, aucun accès au localStorage réel.
+     Ordre : noyau, fonctions pures du CRA, harnais, tests du noyau, du module Heures (spec §15)
+     et du CRA (cra-donnees.js). -->
+<script src="../assets/taf.js" defer></script>
+<script src="../assets/cra-donnees.js" defer></script>
+<script src="harnais.js" defer></script>
+<script src="tests.js" defer></script>
+<script src="heures.test.js" defer></script>
+<script src="cra.test.js" defer></script>
+</head>
+<body>
+  <div class="sr-only" id="liveRegion" aria-live="polite" role="status"></div>
+  <main class="t-page">
+    <span class="eyebrow">TAF — tests unitaires</span>
+    <h1>Fonctions pures du noyau <code>assets/taf.js</code></h1>
+    <p class="t-resume" id="resume" role="status">Exécution…</p>
+    <ol class="t-liste" id="resultats"></ol>
+    <div id="bac-a-sable" hidden></div>
+  </main>
+</body>
+</html>

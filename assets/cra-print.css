@@ -1,0 +1,104 @@
+/* ============================================================================
+   TAF — MODULE CRA, IMPRESSION / PDF (assets/cra-print.css)
+   Liée par <link id="printRules" rel="stylesheet" media="print">. Pas de
+   bloc @media ici : c'est l'attribut media du <link> qui garde ces règles.
+   Pourquoi une feuille dédiée plutôt qu'un @media print dans cra.css :
+   l'auto-fit une-page (cra.js → appliquerFit) MESURE le document avec ces
+   règles appliquées à l'écran en basculant link.media 'print' → 'all'.
+   Cette bascule DOM fonctionne partout (http et file://), alors que lire /
+   modifier les cssRules d'une feuille est refusé en file:// par Chrome.
+   Le zoom calculé arrive par une variable CSS (--print-zoom, posée en CSSOM
+   sur #sheet) : aucun <style> n'est créé dynamiquement (CSP style-src 'self').
+   Ordre document : en-tête → infos → tableau liste → total → commentaire →
+   signatures. Le « chrome » commun (barre, navigation, tiroir, toasts, fond
+   blanc, motif, couleurs exactes) est géré par la section 14 de taf.css :
+   ces règles-là n'influent pas sur la hauteur mesurée, elles ne sont donc
+   pas répétées ici.
+   La mesure se fait à l'ÉCRAN : les paliers « écran » (cibles tactiles de
+   44 px, en-tête en colonne sur téléphone) y sont neutralisés ci-dessous —
+   ils ne s'appliquent pas à l'impression, la mesure doit donc les ignorer.
+============================================================================ */
+@page{ size:A4 portrait; margin:8mm; }
+html, body{ overflow:visible !important; }
+.aids, .est, .foot-note, .sign-actions, .day-sheet, .no-print,
+#calPanel, .cal-trigger, .cal-modal-head, .cal-weekdays, .cal-grid, .calendar{ display:none !important; }
+.page{ padding:0 !important; display:block !important; height:auto !important; }
+.sheet{ max-width:none !important; width:auto !important; height:auto !important; box-shadow:none; border-radius:0; padding:0; margin:0 auto; display:block !important; }
+/* Auto-fit une page : zoom mesuré par appliquerFit() (1 par défaut). */
+#sheet{ zoom:var(--print-zoom, 1); }
+.doc-head{ border-bottom:none !important; padding:0 !important; margin:0 !important; }
+/* Neutralise les paliers écran pendant la mesure de l'auto-fit (valeurs de base). */
+.doc-head{ flex-direction:row !important; align-items:flex-end !important; gap:14px 24px !important; }
+.doc-head .lead{ flex:1 1 260px !important; min-width:220px !important; }
+.period select.field{ flex:0 1 auto !important; }
+/* Cibles tactiles de 44 px (paliers ≤ 899 px / pointeur grossier) : sans effet à l'impression,
+   donc neutralisées pour que la mesure de l'auto-fit égale la hauteur réellement imprimée. */
+.title-input, .sign-role, .sign-meta input, select.field, .field input.value{ min-height:0 !important; }
+
+/* Ordre : en-tête, infos, tableau liste, total, commentaire, signatures */
+.workspace{ display:flex !important; flex-direction:column !important; height:auto !important; overflow:visible !important; gap:0 !important; margin:0 !important; }
+.col-left{ display:contents !important; }
+/* Les conteneurs de mise en page s'effacent : leurs enfants redeviennent enfants
+   directs de .workspace pour que l'ordre document (order:1…5) s'applique. */
+.lay-grid, .lay-a, .lay-b{ display:contents !important; }
+.col{ border:none !important; box-shadow:none !important; background:transparent !important; padding:0 !important; overflow:visible !important; height:auto !important; }
+.info{ order:1; } .print-wrap{ order:2; display:block !important; } .comment-block{ order:4; } .signs{ order:5; }
+
+.doc-brand{ margin:0 0 4px; } .doc-brand .mark-slot{ width:18px; height:19px; }
+.eyebrow{ font-size:8px; letter-spacing:.18em; }
+.title-input{ font-size:17px; font-weight:730; }
+.period{ gap:5px; padding-bottom:0; }
+select.field{ border:none; background:none; padding:0; -webkit-appearance:none; appearance:none; font-size:14px; font-weight:700; }
+.info{ display:grid !important; grid-template-columns:repeat(2,1fr) !important; gap:7px 26px; margin-top:8px; }
+.field{ gap:2px; } .field > label{ font-size:8px; letter-spacing:.07em; } .field input.value{ font-size:12px; padding:1px 1px; border-bottom-color:var(--line-2); }
+
+/* Tableau liste */
+.print-wrap{ margin-top:2px; }
+.print-table{ border:1px solid var(--line-2); }
+.print-table th, .print-table td{ border-bottom:.75px solid var(--line); padding:0; }
+.print-table thead th{ font-size:8px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); font-weight:700; text-align:left; background:#F3F4F6; padding:4px 8px; border-bottom:1px solid var(--line-2); }
+.print-table thead th.center{ text-align:center; padding-left:2px; padding-right:2px; }
+.print-table td.center{ text-align:center; }
+/* Deux gris distincts et TOUS DEUX TRANSPARENTS (rgba) : ils laissent voir le filigrane
+   « Provisoire » posé en fond. Week-end = bleu clair ; jour ouvré non coché = gris neutre.
+   Le week-end PRIME sur « non coché » (tr.nc:not(.we) ne cible que les jours ouvrés). */
+.print-table tr.we td{ background:rgba(70,120,180,.10); }
+.print-table tr.nc:not(.we) td{ background:rgba(100,104,112,.12); }
+.print-table tr.nc td, .print-table tr.nc .pt-date .dn, .print-table tr.nc .pt-date .dd{ color:var(--ink-soft); }
+.pt-date{ padding:2.5px 8px; white-space:nowrap; } .pt-date .dn{ font-size:9px; color:var(--muted); text-transform:capitalize; margin-right:6px; } .pt-date .dd{ font-weight:700; font-variant-numeric:tabular-nums; font-size:11px; }
+.pt-box{ padding:2.5px 2px; } .pbox{ width:13px; height:13px; }
+.pt-act{ padding:2.5px 8px; font-size:10px; line-height:1.3; color:var(--ink); overflow-wrap:anywhere; }
+
+/* Total du PDF : dans .print-wrap (donc imprimé même en Provisoire), alimenté par recalculer(). */
+.print-total{ display:flex; align-items:baseline; justify-content:flex-end; gap:6px; margin-top:6px; padding:2px 2px 0; }
+.print-total .pt-tot-lab{ font-size:8px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+.print-total .pt-tot-num{ font-size:17px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--ink); border-bottom:2.5px solid var(--accent); padding-bottom:1px; }
+.print-total .pt-tot-unit{ font-size:10px; font-weight:650; color:var(--ink-soft); }
+
+.comment-block{ margin-top:0 !important; display:block !important; }
+.section-label{ margin:11px 0 5px; font-size:9px; letter-spacing:.09em; color:var(--muted); }
+/* Fond transparent : le filigrane « Provisoire » reste visible à travers le commentaire. */
+.comment{ min-height:36px; padding:8px 11px; font-size:10.5px; line-height:1.4; box-shadow:none; border-width:1px; border-color:var(--line-2); border-radius:6px; overflow:visible; background:transparent; }
+.comment:empty::before{ content:""; }
+
+.signs{ gap:24px; margin-top:14px; display:grid !important; grid-template-columns:1fr 1fr !important; }
+.sign-role{ font-size:11px; border-bottom:none; font-weight:700; margin-bottom:1px; }
+.sign-zone{ height:64px; margin-top:7px; border-style:solid; border-width:1px; border-color:var(--line-3); border-radius:6px; background:#fff; }
+.sign-empty{ display:none !important; }
+.sign-meta{ margin-top:9px; gap:16px; } .sign-meta label{ font-size:8px; color:var(--muted); }
+.sign-meta input{ font-size:10.5px; padding:1px 2px 4px; min-height:17px; border-bottom:1px solid #A8AEB6; }
+.m-date{ display:none !important; }
+.date-print{ display:block; font-size:10.5px; padding:1px 2px 4px; min-height:17px; border-bottom:1px solid #A8AEB6; color:var(--ink); }
+
+body.no-title .title-input{ display:none !important; }
+body.no-comment .section-label, body.no-comment .comment{ display:none !important; }
+.print-table tr, .sign-card, .print-total{ break-inside:avoid; }
+
+/* Filigrane « Provisoire » : overlay absolu DERRIÈRE le contenu, ancré sur .page →
+   n'ajoute rien à la hauteur de #sheet mesurée par appliquerFit(). */
+.page{ position:relative !important; }
+body.provisoire .prov-watermark{ display:flex !important; position:absolute; inset:0; z-index:0; align-items:center; justify-content:center; pointer-events:none; overflow:hidden; }
+body.provisoire .prov-watermark span{ font-size:110px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:color-mix(in srgb, var(--danger) 30%, transparent); transform:rotate(-32deg); white-space:nowrap; border:6px solid color-mix(in srgb, var(--danger) 24%, transparent); padding:14px 40px; border-radius:14px; }
+body.provisoire .sheet{ position:relative; z-index:1; }
+/* CRA provisoire : pas de signatures dans le PDF (version non définitive). */
+body.provisoire .signs{ display:none !important; }
