@@ -142,6 +142,10 @@
      heures.demiJournees(plages, reglages) → {am, pm, minAm, minPm}
      heures.seuilDemi(reglages)  heures.activiteJour(plages, projets, max?)
      heures.resumeMois(donnees, annee, mois0)
+     heures.balance(donnees, maintenant, vivants?) → {min, jours}  heures sup (+) / à rattraper (−)
+     heures.duJour(reglages, cle|iso) → minutes dues ce jour   heures.validerRecup(brut) → {liste, ignores}
+     heures.insererAvecPause(plagesJour, nouvelle, morceaux) → {plages, rognees, plafonnees}
+     heures.decouperPause(d, f, pauseMin, debutPause|null, coupure) → {plages, debutPause, erreur}
      heures.planifierImport(craDays, resume, mode, avecActivite) → {changements, synthese}
      heures.lireHashCra(hash) → {annee, mois0} | null   heures.hashCra(annee, mois0)
      heures.validerChrono(c, projets?, maintenant?) → chrono | null
@@ -1144,7 +1148,7 @@
   /* fichierOctets : pire cas RÉEL d'une sauvegarde exportée (json car. UTF-16 → jusqu'à 3 octets
      UTF-8 chacun + enveloppe) — toute sauvegarde que l'application accepte de stocker reste
      réimportable. La borne de sécurité reste H.valider + le refus de muter au-delà de json. */
-  var H_LIMITES=Object.freeze({ jours:4000, plagesJour:48, projets:50, nom:40, note:200, journeeType:8, json:2000000, fichierOctets:3*2000000+4096, saisiePlages:12 });
+  var H_LIMITES=Object.freeze({ jours:4000, plagesJour:48, projets:50, nom:40, note:200, journeeType:8, recup:1000, json:2000000, fichierOctets:3*2000000+4096, saisiePlages:12 });
   function minutes(hhmm){
     if(hhmm==='24:00') return 1440;
     if(typeof hhmm!=='string' || !RX.heure.test(hhmm)) return NaN;
@@ -1200,12 +1204,9 @@
     return { plages:sansPlafond?out:out.slice(0, H_LIMITES.plagesJour), retirees:retirees+invalides, plafonnees:plafonnees };
   }
   function normaliserJour(plages){ return normaliserDetail(plages).plages; }
-  // §6.4 — « la saisie la plus récente gagne »
-  function insererPlage(plagesJour, nouvelle){
-    var n=copierPlage(objetSimple(nouvelle)?nouvelle:{}), nd=minutes(n.d), nf=minutes(n.f);
-    var base=normaliserJour(plagesJour);
-    if(!(nf>nd)) return { plages:base, rognees:[] };
-    var res=[], rognees=[];
+  // §6.4 — « la saisie la plus récente gagne » : rognage de l'existant par [n.d, n.f] (n non ajoutée).
+  function rognerPar(base, n){
+    var nd=minutes(n.d), nf=minutes(n.f), res=[], rognees=[];
     base.forEach(function(e){
       if(n.id && e.id===n.id) return;                       // édition : l'ancienne version est retirée
       var ed=minutes(e.d), ef=minutes(e.f);
@@ -1220,10 +1221,41 @@
       if(ed<nd) c.f=n.d; else c.d=n.f;
       res.push(c); rognees.push({ type:'rognee', avant:e, apres:[c] });
     });
-    res.push(n);
+    return { res:res, rognees:rognees };
+  }
+  function insererPlage(plagesJour, nouvelle){
+    var n=copierPlage(objetSimple(nouvelle)?nouvelle:{});
+    var base=normaliserJour(plagesJour);
+    if(!(minutes(n.f)>minutes(n.d))) return { plages:base, rognees:[] };
+    var r=rognerPar(base, n);
+    r.res.push(n);
     // Sans troncature : au-delà de 48, c'est l'appelant (muter → normaliserTouches) qui REFUSE l'action.
-    var fin=normaliserDetail(res, true);
-    return { plages:fin.plages, rognees:rognees, plafonnees:fin.plafonnees };
+    var fin=normaliserDetail(r.res, true);
+    return { plages:fin.plages, rognees:r.rognees, plafonnees:fin.plafonnees };
+  }
+  /* §6.13 — journée avec pause, PURE : « la plus récente gagne » appliquée UNE fois sur l'ENVELOPPE
+     [nouvelle.d, nouvelle.f] (pause comprise : aucune ancienne plage ne subsiste dans la pause),
+     puis insertion des morceaux (decouperPause). Le 1er morceau garde nouvelle.id (édition) et
+     sa session, les suivants reçoivent un id neuf. Morceaux absents / hors enveloppe → insererPlage.
+     → {plages, rognees, plafonnees} */
+  function insererAvecPause(plagesJour, nouvelle, morceaux){
+    var n=copierPlage(objetSimple(nouvelle)?nouvelle:{}), nd=minutes(n.d), nf=minutes(n.f);
+    var brut=Array.isArray(morceaux)?morceaux:[];
+    var m=brut.filter(function(x){
+      return objetSimple(x) && minutes(x.f)>minutes(x.d) && minutes(x.d)>=nd && minutes(x.f)<=nf;
+    });
+    // Un seul morceau invalide ou hors enveloppe → repli sur l'insertion simple (contrat documenté) :
+    // jamais d'enveloppe rognée avec seulement une partie des morceaux réinsérés.
+    if(!(nf>nd) || !m.length || m.length!==brut.length) return insererPlage(plagesJour, n);
+    var r=rognerPar(normaliserJour(plagesJour), n);
+    m.forEach(function(x, i){
+      var c=copierPlage(n); c.d=x.d; c.f=x.f;
+      c.id=(i===0 && typeof n.id==='string' && n.id)?n.id:nouvelId('h');
+      if(i>0) delete c.s;                                          // la session reste au 1er morceau
+      r.res.push(c);
+    });
+    var fin=normaliserDetail(r.res, true);
+    return { plages:fin.plages, rognees:r.rognees, plafonnees:fin.plafonnees };
   }
   /* §6.3 — chrono → plages : découpe aux minuits LOCAUX, fin = début + durée RÉELLE
      (les jours de changement d'heure, la fin affichée suit la durée réellement
@@ -1355,7 +1387,7 @@
   function reglagesDefaut(){
     return { objHebdoMin:2100, dureeJourMin:420, joursOuvres:[1,2,3,4,5], debutHabituel:'09:00', pauseDejMin:60, coupure:'13:00',
       seuilDemiMin:null, rattrapage:true, arrondiMin:1, modeArrondi:'proche', alerteOubliMin:600, projetDemarrage:'dernier',
-      secondes:true, vibration:true, autoPointer:false, journeeType:null, raccourcis:true, rappelSauvegardeJours:30 };
+      vibration:true, autoPointer:false, journeeType:null, raccourcis:true, rappelSauvegardeJours:30, saisieRapide:false, balanceDepuis:null };
   }
   function idsProjets(projets){
     if(!Array.isArray(projets)) return null;
@@ -1391,7 +1423,7 @@
     parmi('modeArrondi', ['proche','favorable']);
     entier('alerteOubliMin', 120, 1440);
     parmi('projetDemarrage', ['dernier','aucun']);
-    booleen('secondes'); booleen('vibration'); booleen('autoPointer');
+    booleen('vibration'); booleen('autoPointer');                  // « secondes » (ancien) : ignoré sans bruit
     if(a('journeeType') && o.journeeType!==null){
       if(Array.isArray(o.journeeType)){
         var jt=[];
@@ -1408,6 +1440,11 @@
     } else r.journeeType=null;
     booleen('raccourcis');
     parmi('rappelSauvegardeJours', [0,7,30]);
+    booleen('saisieRapide');                                       // absent (anciennes données) → false
+    // §6.12 — début de la balance : 'AAAA-MM-JJ' (regex + date réelle) ou null (depuis le début).
+    if(a('balanceDepuis') && o.balanceDepuis!==null){
+      if(cleValide(o.balanceDepuis)) r.balanceDepuis=o.balanceDepuis; else { r.balanceDepuis=null; ign++; }
+    } else r.balanceDepuis=null;
     return { reglages:r, ignores:ign };
   }
   function validerReglages(o, projets){ return validerReglagesDetail(o, idsProjets(projets)).reglages; }
@@ -1423,6 +1460,92 @@
     var am=minAm>=seuil, pm=minPm>=seuil;
     if(!am && !pm && r.rattrapage && minAm+minPm>=seuil){ if(minAm>=minPm) am=true; else pm=true; }   // égalité : matin
     return { am:am, pm:pm, minAm:minAm, minPm:minPm };
+  }
+  /* §6.12 — dû d'un jour, PURE : contrat réel réparti sur les jours ouvrés (minutes EXACTES,
+     sans pas de 15 min) = objHebdoMin / nombre de jours ouvrés ; objHebdoMin = 0 → repli sur
+     dureeJourMin ; 0 hors jours ouvrés. cle : 'AAAA-MM-JJ' ou n° ISO du jour (1 = lundi … 7). */
+  function duJour(reglages, cle){
+    var r=validerReglages(reglages), iso=cle;
+    if(typeof cle==='string'){ var d=depuisCle(cle); if(!d) return 0; iso=((d.getDay()+6)%7)+1; }
+    if(!Number.isInteger(iso) || r.joursOuvres.indexOf(iso)===-1) return 0;
+    return r.objHebdoMin?r.objHebdoMin/r.joursOuvres.length:r.dureeJourMin;
+  }
+  /* §6.12 — balance d'heures (heures sup / à rattraper), PURE. Jours comptés : de
+     reglages.balanceDepuis (inclus ; null = depuis le début) à aujourd'hui inclus.
+     Jour SAISI (au moins une plage) : écart = total du jour (union) − dû (duJour) ; un week-end
+     travaillé = heures sup. Jour SANS plage : ignoré (congé), sauf s'il est marqué en
+     RÉCUPÉRATION (donnees.recup) : il compte − dû (il solde des heures sup), aujourd'hui compris.
+     Jours futurs ignorés ; aujourd'hui saisi ne compte en négatif qu'une fois terminé
+     (contribution = max(0, écart)), SAUF un jour de récupération, compté tout de suite
+     (avec ou sans plage : la règle est la même dans les deux cas). vivants (facultatif) : {cle:[{d,f}]} — segment du chrono
+     en cours découpé par jour (decouperSegment), compté dans le total de son jour.
+     → {min (signé, arrondi à la minute), jours (nombre de jours comptés)} */
+  function balance(donnees, maintenant, vivants){
+    var out={ min:0, jours:0 };
+    if(!objetSimple(donnees) || !objetSimple(donnees.jours)) return out;
+    var now=(typeof maintenant==='number' && isFinite(maintenant))?maintenant:Date.now();
+    var today=cleDate(new Date(now)), r=validerReglages(donnees.reglages), viv=objetSimple(vivants)?vivants:{};
+    var depuis=r.balanceDepuis||'', recup=Object.create(null), vus=Object.create(null), somme=0;
+    validerRecup(donnees.recup).liste.forEach(function(k){ recup[k]=true; });
+    Object.keys(donnees.jours).concat(Object.keys(viv), Object.keys(recup)).forEach(function(cle){
+      if(vus[cle] || !cleValide(cle) || cle>today || cle<depuis) return;
+      vus[cle]=true;
+      var pl=[];
+      if(aPropre.call(donnees.jours, cle) && Array.isArray(donnees.jours[cle])) pl=pl.concat(donnees.jours[cle]);
+      if(aPropre.call(viv, cle) && Array.isArray(viv[cle])) pl=pl.concat(viv[cle]);
+      var du=duJour(r, cle), ecart;
+      if(pl.length){
+        ecart=unionMinutes(pl)-du;
+        if(cle===today && !recup[cle]) ecart=Math.max(0, ecart);   // récupération : comptée tout de suite
+      } else if(recup[cle] && du) ecart=-du;                         // récupération un jour non dû : sans effet
+      else return;
+      somme+=ecart; out.jours++;
+    });
+    out.min=Math.round(somme);
+    return out;
+  }
+  /* §5.2 — jours de récupération : tableau de clés 'AAAA-MM-JJ' (regex + date réelle), sans
+     doublon, triées, bornées aux LIMITES.recup plus récentes. Absent → []. → {liste, ignores} */
+  function validerRecup(brut){
+    if(brut===undefined || brut===null) return { liste:[], ignores:0 };
+    if(!Array.isArray(brut)) return { liste:[], ignores:1 };
+    var vus=Object.create(null), l=[], ign=0;
+    brut.forEach(function(k){ if(cleValide(k)){ if(!vus[k]){ vus[k]=true; l.push(k); } } else ign++; });
+    l.sort();
+    if(l.length>H_LIMITES.recup){ ign+=l.length-H_LIMITES.recup; l=l.slice(l.length-H_LIMITES.recup); }
+    return { liste:l, ignores:ign };
+  }
+  /* §6.13 — journée avec pause, PURE : [d, f] moins une pause de pauseMin minutes → deux plages.
+     d, f, debutPause : minutes (0–1440) ou 'HH:MM' ; coupure idem (défaut 13:00).
+     debutPause null : centrée sur la coupure si la pause y tient entièrement dans la plage,
+     sinon centrée sur le milieu de la plage (au multiple de 5 min quand c'est possible).
+     La pause est strictement intérieure : chaque morceau garde au moins 1 min.
+     → {plages:[{d,f}] ('HH:MM'), debutPause (min | null), erreur:null | {code, message}} */
+  function decouperPause(d, f, pauseMin, debutPause, coupure){
+    function m(x){ return (typeof x==='string')?minutes(x):((typeof x==='number' && isFinite(x))?x:NaN); }
+    function err(code, message){ return { plages:[], debutPause:null, erreur:{ code:code, message:message } }; }
+    var a=m(d), b=m(f);
+    if(!(a>=0 && b<=1440 && b>a) || a!==Math.round(a) || b!==Math.round(b)) return err('plage-invalide', 'Plage invalide.');
+    var p=(pauseMin===null || pauseMin===undefined)?0:pauseMin;
+    if(typeof p!=='number' || !Number.isInteger(p) || p<0) return err('pause-invalide', 'Durée de pause invalide (minutes entières).');
+    if(!p) return { plages:[ { d:versHHMM(a), f:versHHMM(b) } ], debutPause:null, erreur:null };
+    if(p>=b-a-1) return err('pause-trop-longue', 'Pause trop longue : elle doit laisser du travail avant et après ('+Math.max(0, b-a-2)+' min au plus).');
+    function tient(x){ return isFinite(x) && x>a && x+p<b; }
+    var dp;
+    if(debutPause===null || debutPause===undefined || debutPause===''){
+      var c=m(coupure); if(!isFinite(c)) c=780;
+      [ c, (a+b)/2 ].forEach(function(centre){
+        if(dp!==undefined) return;
+        var brut=centre-p/2, cinq=arrondir(brut, 5, 'proche'), exact=Math.round(brut);
+        if(tient(cinq)) dp=cinq; else if(tient(exact)) dp=exact;
+      });
+      if(dp===undefined) dp=a+Math.floor((b-a-p)/2);                // garde : p < b − a − 1, toujours intérieur
+    } else {
+      dp=m(debutPause);
+      if(!isFinite(dp) || dp!==Math.round(dp)) return err('pause-debut-invalide', 'Début de pause invalide.');
+      if(!tient(dp)) return err('pause-hors-plage', 'La pause doit tenir dans la plage, entre '+versHHMM(a)+' et '+versHHMM(b)+'.');
+    }
+    return { plages:[ { d:versHHMM(a), f:versHHMM(dp) }, { d:versHHMM(dp+p), f:versHHMM(b) } ], debutPause:dp, erreur:null };
   }
   function activiteJour(plages, projets, max){
     max=(typeof max==='number' && max>=1)?Math.floor(max):200;
@@ -1513,7 +1636,7 @@
     var rapport={ statut:'ok', ignores:0, details:[] }, vus={};
     function ignorer(cat, n){ rapport.ignores+=(n||1); if(!vus[cat]){ vus[cat]=true; rapport.details.push(cat); } }
 
-    var d={ v:1, rev:(Number.isInteger(brut.rev) && brut.rev>=0)?brut.rev:0, jours:Object.create(null), chrono:null, projets:[], reglages:null, meta:null };
+    var d={ v:1, rev:(Number.isInteger(brut.rev) && brut.rev>=0)?brut.rev:0, jours:Object.create(null), chrono:null, projets:[], reglages:null, recup:[], meta:null };
     // Projets d'abord : les références des plages s'y résolvent.
     var connus=Object.create(null);
     if(Array.isArray(brut.projets)){
@@ -1552,6 +1675,10 @@
       });
     } else if(brut.jours!==undefined) ignorer('jours illisibles');
 
+    var rc=validerRecup(brut.recup);                             // §5.2 — absent (anciennes données) → []
+    d.recup=rc.liste;
+    if(rc.ignores) ignorer('récupération invalide', rc.ignores);
+
     d.chrono=validerChrono(brut.chrono, connus, maintenant);
     if(brut.chrono!=null && !d.chrono) ignorer('chrono invalide');
 
@@ -1573,6 +1700,7 @@
     minutes:minutes, versHHMM:versHHMM, arrondir:arrondir, unionMinutes:unionMinutes,
     normaliserJour:normaliserJour, normaliserDetail:normaliserDetail, insererPlage:insererPlage, decouperSegment:decouperSegment, analyserSaisie:analyserSaisie,
     demiJournees:demiJournees, seuilDemi:seuilDemi, seuilAuto:seuilAuto, activiteJour:activiteJour, resumeMois:resumeMois,
+    balance:balance, duJour:duJour, validerRecup:validerRecup, decouperPause:decouperPause, insererAvecPause:insererAvecPause,
     planifierImport:planifierImport, lireHashCra:lireHashCra, hashCra:hashCra
   });
 
@@ -1584,13 +1712,14 @@
   ============================================================ */
   function moduleActif(){ return (doc && doc.body && doc.body.getAttribute('data-module'))||''; }
   var nav=(function(){
-    var lien=null, pastille=null, texte=null, base='', timer=null, pret=false;
+    var lien=null, pastille=null, base='', timer=null, pret=false;
+    // Pastille = un POINT seul (plein en marche, demi en pause), sans durée qui défile :
+    // aucun rafraîchissement à la minute ; mise à jour sur l'événement storage.
     function etatPastille(chrono, maintenant){
       if(!objetSimple(chrono)) return null;
-      if(chrono.e==='pause') return { etat:'pause', texte:'pause', libelle:'chrono en pause', prochaine:null };
+      if(chrono.e==='pause') return { etat:'pause', libelle:'chrono en pause', prochaine:null };
       if(chrono.e!=='marche' || typeof chrono.t0!=='number' || !isFinite(chrono.t0)) return null;
-      var ecoule=Math.max(0, maintenant-chrono.t0), min=Math.floor(ecoule/60000);
-      return { etat:'marche', texte:pad2(Math.floor(min/60))+':'+pad2(min%60), libelle:'chrono en cours depuis '+fmtDureeLongue(min), prochaine:60000-(ecoule%60000) };
+      return { etat:'marche', libelle:'chrono en cours', prochaine:null };
     }
     function lireChrono(){
       var t=stockage.lireTexte(CLES.heures); if(t==null) return null;
@@ -1603,11 +1732,10 @@
       var e=etatPastille(lireChrono(), Date.now());
       if(!e){ if(pastille) pastille.hidden=true; lien.removeAttribute('aria-label'); return; }
       if(!pastille){
-        texte=el('span', { class:'tnp-texte' });
-        pastille=el('span', { class:'taf-nav-pastille', 'aria-hidden':'true' }, [ el('span', { class:'tnp-point' }), texte ]);
+        pastille=el('span', { class:'taf-nav-pastille', 'aria-hidden':'true' }, [ el('span', { class:'tnp-point' }) ]);
         lien.appendChild(pastille);
       }
-      pastille.setAttribute('data-etat', e.etat); texte.textContent=e.texte; pastille.hidden=false;
+      pastille.setAttribute('data-etat', e.etat); pastille.hidden=false;
       lien.setAttribute('aria-label', base+', '+e.libelle);
       if(e.prochaine!=null && doc.visibilityState!=='hidden') timer=setTimeout(rafraichir, e.prochaine+40);
     }

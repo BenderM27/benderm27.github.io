@@ -42,6 +42,10 @@
 
   /* États sémantiques (jamais l'accent) */
   --danger:#C0392B; --danger-ink:#B23A1E; --danger-fill:#FFF6F4; --ok:#15A66B;
+  /* Écart positif / négatif en TEXTE (ex. balance d'heures) — jamais seuls : toujours signe + libellé.
+     Contraste ≥ 4,5:1 : 6,5:1 sur blanc et 5,1:1 sur le pire --accent-fill-2 possible (accent noir,
+     #E3E3E3), donc pour tout accent personnalisé. */
+  --positif:#0B6B43; --negatif:#B42318;
 
   --radius:20px; --radius-md:14px; --radius-sm:11px; --r1:7px;
 
@@ -197,7 +201,7 @@ main:focus{ outline:none; }
 /* Pastille « en cours » (chrono Heures, posée par TAF.nav) : en position absolue,
    elle ne change jamais la largeur de l'onglet → aucun décalage de mise en page.
    Forme + texte : point plein « 02:14 » en marche, demi-point « pause » en pause. */
-.taf-nav-pastille{ position:absolute; top:-7px; right:-6px; z-index:1; display:inline-flex; align-items:center; gap:4px; padding:0 6px 0 5px; min-height:17px; border-radius:99px; background:var(--accent); color:var(--on-accent); font-size:10px; font-weight:750; line-height:1; letter-spacing:.01em; font-variant-numeric:tabular-nums; white-space:nowrap; box-shadow:0 0 0 2px var(--paper), 0 1px 3px rgba(16,18,24,.25); pointer-events:none; animation:taf-fondu .2s var(--ease) both; }
+.taf-nav-pastille{ position:absolute; top:-6px; right:-6px; z-index:1; display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; border-radius:50%; background:var(--accent); color:var(--on-accent); box-shadow:0 0 0 2px var(--paper), 0 1px 3px rgba(16,18,24,.25); pointer-events:none; animation:taf-fondu .2s var(--ease) both; }   /* point seul, sans durée */
 .taf-nav-pastille .tnp-point{ flex:0 0 auto; width:6px; height:6px; border-radius:50%; background:currentColor; border:1.5px solid currentColor; }
 .taf-nav-pastille[data-etat="pause"]{ background:var(--paper); color:var(--accent-deep); box-shadow:0 0 0 1.5px var(--accent-edge), 0 1px 3px rgba(16,18,24,.18); }
 .taf-nav-pastille[data-etat="pause"] .tnp-point{ background:linear-gradient(90deg, currentColor 50%, transparent 50%); }

@@ -20,7 +20,7 @@
 
   <a class="skip-link" href="#ptHex" data-saut="ptHex">Aller au chrono</a>
   <a class="skip-link" href="#contenu" data-saut="contenu">Aller au contenu</a>
-  <!-- Région d'annonces de la page (TAF.annoncer) : résultats d'action, jamais le minuteur. -->
+  <!-- Région d'annonces de la page (TAF.annoncer) : résultats d'action, jamais un décompte à la seconde. -->
   <div class="sr-only" id="liveRegion" aria-live="polite" role="status"></div>
 
   <header class="topbar">
@@ -70,9 +70,14 @@
       <h2 class="sr-only" id="pointeuseTitre">Chrono</h2>
       <div class="pt" id="pt" data-etat="repos">
         <div class="pt-info">
-          <span class="pt-etat"><span class="pt-etat-point" aria-hidden="true"></span><span class="pt-etat-txt" id="ptEtat">Prêt</span></span>
-          <span class="pt-chiffres" id="ptChiffres" role="timer" aria-live="off" aria-atomic="false" aria-label="Durée de la session"><span class="pt-hm"><span class="pt-h" id="ptH">00</span><span class="pt-sep">:</span><span class="pt-m" id="ptM">00</span></span><span class="pt-s" id="ptS">:00</span></span>
-          <span class="pt-sous" id="ptSous"><span class="pt-projet" id="ptProjet"></span><span id="ptDepuis">Touchez l'hexagone pour démarrer</span></span>
+          <!-- Balance cumulée (heures sup / à rattraper) : signe + libellé + couleur, jamais la couleur seule.
+               Texte visuel masqué aux lecteurs d'écran au profit d'une phrase complète (#ptBalSr). Aucune annonce. -->
+          <p class="pt-balance" id="ptBalance" data-signe="zero">
+            <span class="pt-bal-val" id="ptBalVal" aria-hidden="true">0 min</span>
+            <span class="pt-bal-lib" id="ptBalLib" aria-hidden="true">À jour</span>
+            <span class="sr-only" id="ptBalSr">Balance d'heures : à jour</span>
+          </p>
+          <p class="pt-sous" id="ptSous"><span class="pt-etat-point" aria-hidden="true"></span><span class="pt-etat-txt" id="ptEtat"><span class="pt-etat-mot" id="ptEtatMot">Prêt</span><span class="pt-etat-suite" id="ptEtatSuite"></span></span><span class="pt-projet" id="ptProjet"></span></p>
           <button class="pt-info-tap" id="ptInfo" type="button" aria-haspopup="dialog" aria-controls="feuilleChrono" aria-label="Détails du chrono"></button>
         </div>
         <div class="pt-actions">
@@ -100,9 +105,9 @@
       <!-- Description textuelle de l'état, mise à jour aux SEULS changements d'état -->
       <p class="sr-only" id="etatChrono">Chrono à l'arrêt</p>
 
-      <!-- Colonne gauche (≥ 1024 px) : journée type + saisie rapide toujours visible -->
+      <!-- Colonne gauche (≥ 1024 px) : journée type + saisie rapide (masquée par défaut : réglage saisieRapide) -->
       <div class="h-gauche-extras" id="gaucheExtras">
-        <div class="h-carte h-rapide-carte">
+        <div class="h-carte h-rapide-carte" id="rapideCarte" hidden>
           <label class="h-label" for="rapideG" id="rapideGLib">Saisie rapide</label>
           <input class="taf-input h-rapide-champ" id="rapideG" type="text" autocomplete="off" spellcheck="false" maxlength="300" placeholder="9-12:30 13:30-17 @projet note" aria-describedby="rapideGApercu rapideGAide" aria-keyshortcuts="/" enterkeyhint="done">
           <div class="h-rapide-apercu" id="rapideGApercu"></div>
@@ -123,7 +128,7 @@
       <button class="btn small ghost iconly" id="plageFermer" type="button" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
     <div class="taf-feuille-corps">
-      <div class="h-rapide" id="plageRapideBloc">
+      <div class="h-rapide" id="plageRapideBloc" hidden>
         <label class="h-label" for="plageRapide">Saisie rapide</label>
         <input class="taf-input h-rapide-champ" id="plageRapide" type="text" autocomplete="off" spellcheck="false" maxlength="300" placeholder="9-12:30 @projet note" aria-describedby="plageRapideApercu" enterkeyhint="done">
         <div class="h-rapide-apercu" id="plageRapideApercu"></div>
@@ -158,6 +163,25 @@
           <button class="h-puce" type="button" data-duree="120">+2 h</button>
           <button class="h-puce" type="button" data-duree="demi" id="plageDemi">½ journée</button>
         </div>
+        <!-- Pause dans la plage (journée complète avec pause) : enregistrée en deux plages, une seule mutation. -->
+        <fieldset class="h-pause" id="plagePauseBloc">
+          <legend class="h-label">Pause</legend>
+          <div class="h-puces h-pause-puces" id="plagePausePuces">
+            <button class="h-puce" type="button" data-pause="0" aria-pressed="true">Aucune</button>
+            <button class="h-puce" type="button" data-pause="30" aria-pressed="false">30 min</button>
+            <button class="h-puce" type="button" data-pause="45" aria-pressed="false">45 min</button>
+            <button class="h-puce" type="button" data-pause="60" aria-pressed="false">1 h</button>
+            <button class="h-puce" type="button" data-pause="90" aria-pressed="false">1 h 30</button>
+            <!-- Puce « Pause déj. » = réglage pauseDejMin, affichée (par le JS) seulement si elle diffère des puces ci-dessus. -->
+            <button class="h-puce" type="button" data-pause="" id="plagePauseDej" aria-pressed="false" hidden></button>
+            <button class="h-puce" type="button" data-pause="autre" aria-pressed="false">Autre…</button>
+          </div>
+          <div class="h-pause-champs" id="plagePauseChamps" hidden>
+            <div class="h-champ"><label class="h-label" for="plagePause">Durée (min)</label><input class="taf-input h-nombre" id="plagePause" type="number" inputmode="numeric" min="0" max="900" step="5" value="0"></div>
+            <div class="h-champ"><label class="h-label" for="plagePauseDebut">Début de la pause</label><input class="taf-input h-heure" id="plagePauseDebut" type="time" step="60"></div>
+          </div>
+          <p class="h-aide" id="plagePauseNote" hidden>Pause indisponible pour une plage qui se termine le lendemain : saisissez deux plages.</p>
+        </fieldset>
         <p class="h-duree-calc" id="plageDuree"></p>
       </div>
       <p class="h-chevauche" id="plageChevauche" hidden></p>
@@ -255,6 +279,24 @@
         </div>
       </details>
 
+      <details class="h-section" id="secBalance">
+        <summary>Balance d'heures</summary>
+        <div class="h-section-corps">
+          <!-- Rempli par heures.js (aideBalance : valeurs réelles des réglages). -->
+          <p class="h-aide" id="rBalanceAide"></p>
+          <div class="h-reglage"><label for="rBalanceDepuis">Balance depuis le</label><input class="taf-input h-date" id="rBalanceDepuis" type="date" min="2000-01-01" max="2100-12-31" aria-describedby="rBalanceDepuisAide"><p class="h-aide" id="rBalanceDepuisAide">Jour inclus. Vide : depuis le début. Les jours antérieurs sont ignorés.</p></div>
+          <div class="h-reglage-actions"><button class="btn small" id="rBalanceZero" type="button">Remettre à zéro aujourd'hui</button></div>
+        </div>
+      </details>
+
+      <details class="h-section" id="secSaisie">
+        <summary>Saisie rapide</summary>
+        <div class="h-section-corps">
+          <div class="drow"><span class="lbl" id="rSaisieRapideLib">Afficher la saisie rapide</span><label class="switch"><input type="checkbox" id="rSaisieRapide" role="switch" aria-labelledby="rSaisieRapideLib" aria-describedby="rSaisieRapideAide"><span class="track"></span><span class="thumb"></span></label></div>
+          <p class="h-aide" id="rSaisieRapideAide">Un champ texte pour tout saisir d'une ligne, par exemple <span class="h-code">9-12:30 13:30-17 @projet note</span> : dans la feuille Plage et la colonne de gauche sur grand écran (raccourci <kbd>/</kbd>).</p>
+        </div>
+      </details>
+
       <details class="h-section" id="secConversion">
         <summary>Conversion CRA</summary>
         <div class="h-section-corps">
@@ -284,7 +326,6 @@
           <div class="h-reglage"><label for="rAlerte">Alerte « chrono oublié » après (heures)</label><input class="taf-input h-nombre" id="rAlerte" type="number" inputmode="decimal" min="2" max="24" step="0.5"></div>
           <div class="h-reglage"><label for="rProjetDemarrage">Projet au démarrage</label>
             <select class="field" id="rProjetDemarrage"><option value="dernier">Dernier projet chronométré</option><option value="aucun">Aucun</option></select></div>
-          <div class="drow"><span class="lbl" id="rSecondesLib">Afficher les secondes</span><label class="switch"><input type="checkbox" id="rSecondes" role="switch" aria-labelledby="rSecondesLib"><span class="track"></span><span class="thumb"></span></label></div>
           <div class="drow"><span class="lbl" id="rVibrationLib">Vibration au démarrage, à la pause et à l'arrêt</span><label class="switch"><input type="checkbox" id="rVibration" role="switch" aria-labelledby="rVibrationLib"><span class="track"></span><span class="thumb"></span></label></div>
           <div class="drow"><span class="lbl" id="rAutoLib">Démarrer en ouvrant le favori <span class="h-code">#pointer</span></span><label class="switch"><input type="checkbox" id="rAuto" role="switch" aria-labelledby="rAutoLib"><span class="track"></span><span class="thumb"></span></label></div>
           <p class="h-aide">Ajoutez <span class="h-code">heures.html#pointer</span> à l'écran d'accueil : le chrono démarre à l'ouverture (annulable).</p>
@@ -314,7 +355,7 @@
           </div>
           <p class="h-erreur" id="rProjetErreur" role="alert" hidden></p>
           <ul class="h-projets-liste" id="rProjets"></ul>
-          <p class="h-aide" id="rProjetsVide">Aucun projet : ils sont facultatifs. Tapez <span class="h-code">@nom</span> dans la saisie rapide pour en utiliser un.</p>
+          <p class="h-aide" id="rProjetsVide">Aucun projet : ils sont facultatifs.<span id="rProjetsVideRapide" hidden> Tapez <span class="h-code">@nom</span> dans la saisie rapide pour en utiliser un.</span></p>
         </div>
       </details>
 
@@ -328,7 +369,7 @@
             <div><dt><kbd>J</kbd></dt><dd>Journée type</dd></div>
             <div><dt><kbd>T</kbd></dt><dd>Aujourd'hui</dd></div>
             <div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Période précédente / suivante</dd></div>
-            <div><dt><kbd>/</kbd></dt><dd>Saisie rapide</dd></div>
+            <div id="rRaccourciRapide" hidden><dt><kbd>/</kbd></dt><dd>Saisie rapide</dd></div>
             <div><dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></dt><dd>Jour / Semaine / Mois</dd></div>
             <div><dt><kbd>Ctrl</kbd> <kbd>Z</kbd></dt><dd>Annuler (<kbd>Maj</kbd> : rétablir)</dd></div>
             <div><dt><kbd>Suppr</kbd></dt><dd>Supprimer la plage sélectionnée</dd></div>
