@@ -198,13 +198,6 @@ main:focus{ outline:none; }
 .taf-nav a[aria-current="page"]{ color:var(--ink); background:var(--paper); box-shadow:0 1px 2px rgba(16,18,24,.08), 0 0 0 1px var(--line-2); view-transition-name:taf-onglet; }
 .taf-nav a[aria-current="page"] svg{ color:var(--accent-deep); }
 .taf-nav a:focus-visible{ outline:2.5px solid var(--accent); outline-offset:2px; box-shadow:var(--focus-halo); border-radius:9px; }
-/* Pastille « en cours » (chrono Heures, posée par TAF.nav) : en position absolue,
-   elle ne change jamais la largeur de l'onglet → aucun décalage de mise en page.
-   Forme + texte : point plein « 02:14 » en marche, demi-point « pause » en pause. */
-.taf-nav-pastille{ position:absolute; top:-6px; right:-6px; z-index:1; display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; border-radius:50%; background:var(--accent); color:var(--on-accent); box-shadow:0 0 0 2px var(--paper), 0 1px 3px rgba(16,18,24,.25); pointer-events:none; animation:taf-fondu .2s var(--ease) both; }   /* point seul, sans durée */
-.taf-nav-pastille .tnp-point{ flex:0 0 auto; width:6px; height:6px; border-radius:50%; background:currentColor; border:1.5px solid currentColor; }
-.taf-nav-pastille[data-etat="pause"]{ background:var(--paper); color:var(--accent-deep); box-shadow:0 0 0 1.5px var(--accent-edge), 0 1px 3px rgba(16,18,24,.18); }
-.taf-nav-pastille[data-etat="pause"] .tnp-point{ background:linear-gradient(90deg, currentColor 50%, transparent 50%); }
 
 /* ============================================================
    6. TÉMOIN DE SAUVEGARDE (piloté par TAF.temoin, ne stocke rien)
@@ -425,7 +418,6 @@ main.page{ view-transition-name:taf-contenu; }
   .taf-nav a{ flex:1 1 auto; flex-direction:column; gap:3px; min-height:50px; padding:4px 8px; border-radius:12px; font-size:11.5px; letter-spacing:.01em; }
   .taf-nav a svg{ width:20px; height:20px; }
   .taf-nav a[aria-current="page"]{ background:var(--accent-fill-2); color:var(--accent-deep); box-shadow:inset 0 0 0 1px var(--accent-edge); }
-  .taf-nav-pastille{ top:2px; right:auto; left:calc(50% + 5px); }
   .page{ padding-block-end:calc(40px + var(--nav-h) + env(safe-area-inset-bottom)); }
   select.field, .field input.value, .taf-input{ font-size:16px; }   /* évite le zoom iOS au focus */
 }
