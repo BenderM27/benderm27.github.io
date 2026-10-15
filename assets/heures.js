@@ -87,7 +87,8 @@
     alerte:{ vb:'0 0 24 24', a:TRAIT, p:[{ d:'M12 3.5 2.5 20h19z' },{ d:'M12 10v4.5M12 17.2h.01' }] },
     info:{ vb:'0 0 24 24', a:TRAIT, p:[{ t:'circle', cx:'12', cy:'12', r:'9' },{ d:'M12 11v5M12 8h.01' }] },
     coche:{ vb:'0 0 24 24', a:{ fill:'none', stroke:'currentColor', 'stroke-width':'2.6', 'stroke-linecap':'round', 'stroke-linejoin':'round' }, p:[{ d:'M5 12.5l4.5 4.5L19 7.5' }] },
-    corbeille:{ vb:'0 0 24 24', a:TRAIT, p:[{ d:'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3' }] }
+    corbeille:{ vb:'0 0 24 24', a:TRAIT, p:[{ d:'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3' }] },
+    recup:{ vb:'0 0 24 24', a:TRAIT, p:[{ d:'M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5' },{ d:'M3.5 3.5v5h5M12 8v4.5l3 1.8' }] }
   };
   function icone(nom, taille){
     var s=T.creerSvg(IC[nom]), t=String(taille||16);
@@ -109,7 +110,7 @@
   var lectureSeule=false;      // illisible / futur : aucune écriture
 
   function donneesNeuves(){
-    return { v:1, rev:0, jours:Object.create(null), chrono:null, projets:[], reglages:H.reglagesDefaut(),
+    return { v:1, rev:0, jours:Object.create(null), chrono:null, projets:[], reglages:H.reglagesDefaut(), recup:[],
       meta:{ creeLe:aujourdHui(), derniereSauvegarde:null, accueilVu:false } };
   }
   // Copie de travail : dictionnaire des jours SANS prototype, clés revalidées.
@@ -117,6 +118,7 @@
     var c=clone(d), j=Object.create(null);
     Object.keys(c.jours||{}).forEach(function(k){ if(T.dates.cleValide(k) && Array.isArray(c.jours[k])) j[k]=c.jours[k]; });
     c.jours=j;
+    c.recup=H.validerRecup(c.recup).liste;                         // jours de récupération (§5.2), absent → []
     return c;
   }
   function appliquerTexte(t){
@@ -200,7 +202,7 @@
     catch(err){ T.toast({ message:(err && err.message)?err.message:'Action impossible.', type:'erreur' }); return null; }
     var avant={ jours:{} }, change=touches.length>0;
     touches.forEach(function(k){ avant.jours[k]=base.jours[k]?clone(base.jours[k]):null; });
-    ['chrono','projets','reglages','meta'].forEach(function(k){
+    ['chrono','projets','reglages','recup','meta'].forEach(function(k){
       if(JSON.stringify(base[k])!==JSON.stringify(e[k])){ avant[k]=clone(base[k]); change=true; }
     });
     if(!change) return { inchange:true, res:res, touches:[] };
@@ -253,7 +255,7 @@
         var v=instantane.jours[k];
         if(v) e.jours[k]=clone(v); else delete e.jours[k];
       });
-      ['chrono','projets','reglages','meta'].forEach(function(k){ if(aPropre(instantane, k)) e[k]=clone(instantane[k]); });
+      ['chrono','projets','reglages','recup','meta'].forEach(function(k){ if(aPropre(instantane, k)) e[k]=clone(instantane[k]); });
     };
   }
   function annuler(){
@@ -648,15 +650,14 @@
     dernierRendu=cle;
   }
 
-  /* Tick d'affichage : aligné sur la prochaine seconde (minute si secondes masquées
-     ou chrono arrêté) ; ne modifie que des textContent. Suspendu onglet caché. */
+  /* Tick d'affichage : aligné sur la prochaine minute (plus aucun chiffre ne défile à la
+     seconde : balance, ligne d'état et totaux bougent à la minute). Suspendu onglet caché. */
   var timerTick=null;
   function planifierTick(){
     if(timerTick){ clearTimeout(timerTick); timerTick=null; }
     if(doc.hidden || !D) return;
-    var c=D.chrono, now=maintenant();
-    var pas=(c && c.e==='marche' && R().secondes)?1000:60000;
-    timerTick=setTimeout(tick, pas-(now%pas)+15);
+    var now=maintenant();
+    timerTick=setTimeout(tick, 60000-(now%60000)+15);
   }
   function periodeContientAujourdhui(today){
     if(ui.vue==='jour') return ui.ref===today;
@@ -670,7 +671,6 @@
       derniereMinute=m;
       if(D.chrono || today!==dernierJour || (ui.vue!=='mois' && periodeContientAujourdhui(today))){ rendre({ anim:false }); return; }
     }
-    majChiffres(now);
     planifierTick();
   }
 
@@ -703,10 +703,10 @@
   /* ============================================================
      6. POINTEUSE (un seul composant) & BANNIÈRES
   ============================================================ */
-  var pt={ racine:$('pt'), hex:$('ptHex'), lib:$('ptHexLib'), stop:$('ptStop'), etat:$('ptEtat'), h:$('ptH'), m:$('ptM'), s:$('ptS'),
-    projet:$('ptProjet'), depuis:$('ptDepuis'), sec:$('ptSecondaires'), desc:$('etatChrono'), forme:null };
+  var pt={ racine:$('pt'), hex:$('ptHex'), lib:$('ptHexLib'), stop:$('ptStop'), etatMot:$('ptEtatMot'), etatSuite:$('ptEtatSuite'), bal:$('ptBalance'), balVal:$('ptBalVal'), balLib:$('ptBalLib'), balSr:$('ptBalSr'),
+    info:$('ptInfo'), projet:$('ptProjet'), sec:$('ptSecondaires'), desc:$('etatChrono'), forme:null };
   pt.forme=pt.hex?pt.hex.querySelector('.pt-hex-forme'):null;
-  var cumulSession=0, signatureEtat='';
+  var signatureEtat='';
   function etatChrono(){ var c=D && D.chrono; return c?c.e:'repos'; }
   function descriptionEtat(){
     var c=D.chrono;
@@ -714,46 +714,55 @@
     if(c && c.e==='pause') return 'Chrono en pause depuis '+heureParlee(c.tp)+(c.p?', projet '+nomProjet(c.p):'');
     return 'Chrono à l’arrêt';
   }
+  /* Balance cumulée (règle UNIQUE : TAF.heures.balance) à la place d'un compteur qui défile :
+     dérivée de D + segment vivant, mémorisée par état / jour / segment (rendu à la minute). */
+  var memoBalance={ D:null, cle:'', v:null };
+  function balanceCourante(ctx){
+    var cle=ctx.today+'|'+JSON.stringify(ctx.vivants);
+    if(memoBalance.D!==D || memoBalance.cle!==cle) memoBalance={ D:D, cle:cle, v:H.balance(D, ctx.now, ctx.vivants) };
+    return memoBalance.v;
+  }
+  function texteBalance(min){
+    if(min>0) return { signe:'plus', val:'+ '+fmt.duree(min), lib:'Heures sup', sr:'Balance d’heures : '+fmt.dureeLongue(min)+' d’heures supplémentaires' };
+    if(min<0) return { signe:'moins', val:'− '+fmt.duree(-min), lib:'À rattraper', sr:'Balance d’heures : '+fmt.dureeLongue(-min)+' à rattraper' };
+    return { signe:'zero', val:'0 min', lib:'À jour', sr:'Balance d’heures : à jour' };
+  }
+  // Texte d'aide : valeurs RÉELLES des réglages (dû = TAF.heures.duJour, règle unique).
+  function aideBalance(){
+    var r=R(), n=r.joursOuvres.length, du=n?Math.round(H.duJour(r, r.joursOuvres[0])):0;
+    var t=n?'cumul des jours saisis, chaque jour ouvré comparé à '+fmt.duree(du)
+      +(r.objHebdoMin?' (objectif hebdomadaire '+fmt.duree(r.objHebdoMin)+' ÷ '+pluriel(n, 'jour ouvré', 'jours ouvrés')+')':' (durée d’une journée)')+', 0 h les autres jours.'
+      :'aucun jour ouvré : toute heure saisie compte en heures sup.';
+    return t+' Les jours sans saisie ne comptent pas, sauf un jour marqué en récupération (il compte en négatif) ; le jour en cours ne compte en négatif qu’une fois terminé.'
+      +(r.balanceDepuis?' Comptée depuis le '+fmt.dateFr(r.balanceDepuis)+'.':'');
+  }
+  // Ligne d'état UNIQUE (pointeuse et feuille Chrono) : {mot, suite}.
+  function ligneEtat(c, ctx){
+    if(c && c.e==='marche') return { mot:'En marche', suite:' depuis '+heureRelative(c.t0, ctx.today) };
+    if(c && c.e==='pause') return { mot:'En pause', suite:' depuis '+heureRelative(c.tp, ctx.today) };
+    return { mot:'Prêt', suite:'' };
+  }
   function rendrePointeuse(ctx){
     var c=D.chrono, etat=etatChrono();
     pt.racine.setAttribute('data-etat', etat);
-    pt.etat.textContent=(etat==='marche')?'En marche':(etat==='pause'?'En pause':'Prêt');
     pt.hex.setAttribute('aria-label', (etat==='marche')?'Mettre en pause':(etat==='pause'?'Reprendre le chrono':'Démarrer le chrono'));
     pt.lib.textContent=(etat==='marche')?'Pause':(etat==='pause'?'Reprendre':'Démarrer');
     pt.stop.hidden=!c;
-    cumulSession=c?minutesSession(c.s):0;
-    var proj='', depuis='';
-    if(etat==='marche'){ proj=c.p?nomProjet(c.p)+' · ':''; depuis='depuis '+heureRelative(c.t0, ctx.today); }
-    else if(etat==='pause'){ proj=c.p?nomProjet(c.p)+' · ':''; depuis='pause depuis '+heureRelative(c.tp, ctx.today)+' · '+fmt.duree(Math.max(0, Math.floor((ctx.now-c.tp)/60000))); }
-    else { var t=totalJour(ctx.today, ctx); depuis=t?'Aujourd’hui · '+fmt.duree(t):'Touchez l’hexagone pour démarrer'; }
-    pt.projet.textContent=proj; pt.depuis.textContent=depuis;
+    // « En marche » + « depuis 09:02 » (deux segments : très petit écran → « Depuis 09:02 » + pastille de forme)
+    var le=ligneEtat(c, ctx), mot=le.mot, suite=le.suite, proj=(c && c.p)?'· '+nomProjet(c.p):'';
+    if(pt.etatMot.textContent!==mot) pt.etatMot.textContent=mot;
+    if(pt.etatSuite.textContent!==suite) pt.etatSuite.textContent=suite;
+    if(pt.projet.textContent!==proj) pt.projet.textContent=proj;
+    var b=texteBalance(balanceCourante(ctx).min), avant=pt.balVal.textContent;
+    pt.bal.setAttribute('data-signe', b.signe);
+    if(avant!==b.val){
+      pt.balVal.textContent=b.val; pt.balLib.textContent=b.lib; pt.balSr.textContent=b.sr;
+      if(signatureEtat && !reduit() && typeof pt.balVal.animate==='function') pt.balVal.animate([{ opacity:.35, transform:'translateY(-18%)' },{ opacity:1, transform:'none' }], { duration:180, easing:EASE });
+    }
+    var aide='Balance d’heures : '+aideBalance(); if(pt.info.title!==aide) pt.info.title=aide;
     var sig=etat+'|'+(c?c.s+'|'+c.t0+'|'+c.tp+'|'+c.p:'');
     if(sig!==signatureEtat){ pt.desc.textContent=descriptionEtat(); signatureEtat=sig; }
     rendreSecondaires(etat, c);
-    majChiffres(ctx.now);
-  }
-  function chiffresDe(now){
-    var c=D && D.chrono, ms=0, recule=false;
-    if(c && c.e==='marche'){ var dt=now-c.t0; if(dt<0){ recule=true; dt=0; } ms=cumulSession*60000+dt; }
-    else if(c) ms=cumulSession*60000;
-    var tot=Math.floor(ms/1000);
-    return { h:pad2(Math.floor(tot/3600)), m:pad2(Math.floor(tot/60)%60), s:pad2(tot%60), recule:recule };
-  }
-  function animerMinute(n){
-    if(reduit() || !n || typeof n.animate!=='function') return;
-    n.animate([{ transform:'translateY(-30%)', opacity:0 },{ transform:'none', opacity:1 }], { duration:160, easing:EASE });
-  }
-  function poserChiffres(cibles, v, animer){
-    if(cibles.h.textContent!==v.h) cibles.h.textContent=v.h;
-    if(cibles.m.textContent!==v.m){ var avant=cibles.m.textContent; cibles.m.textContent=v.m; if(animer && avant) animerMinute(cibles.m); }
-    cibles.s.textContent=':'+v.s;
-    cibles.s.hidden=!R().secondes;
-  }
-  function majChiffres(now){
-    if(!D) return;
-    var v=chiffresDe(now), marche=etatChrono()==='marche';
-    poserChiffres(pt, v, marche);
-    if(fc.ouvert && fc.chiffres) poserChiffres(fc.chiffres, v, marche);
   }
   function animerHex(){
     if(reduit() || !pt.forme || typeof pt.forme.animate!=='function') return;
@@ -1031,6 +1040,9 @@
      8. VUES JOUR & SEMAINE
   ============================================================ */
   function ouvre(cle){ return R().joursOuvres.indexOf(isoJour(cle))!==-1; }
+  // Objectif affiché d'un jour : son dû (TAF.heures.duJour, même règle que la balance), sinon la durée d'une journée.
+  function objectifJour(cle){ return Math.round(H.duJour(R(), cle))||R().dureeJourMin; }
+  function estRecup(cle){ return Array.isArray(D.recup) && D.recup.indexOf(cle)!==-1; }
   function journeeType(){ var jt=R().journeeType; return (Array.isArray(jt) && jt.length)?jt:null; }
   function dureeJt(){ var jt=journeeType(); return jt?jt.reduce(function(t, x){ return t+minutes(x.f)-minutes(x.d); }, 0):0; }
 
@@ -1084,13 +1096,13 @@
     var indic=el('span', { class:'h-bande-indic', 'aria-hidden':'true' });
     wrap.appendChild(indic);
     for(var i=0;i<7;i++){
-      var k=T.dates.ajouterJours(lundi, i), tot=totalJour(k, ctx);
+      var k=T.dates.ajouterJours(lundi, i), tot=totalJour(k, ctx), rec=estRecup(k);
       if(k===cle) idx=i;
-      var b=el('button', { type:'button', class:'h-bj'+(ouvre(k)?'':' non-ouvre')+(k===ctx.today?' auj':''), 'aria-pressed':String(k===cle),
-        'aria-current':k===ctx.today?'date':null, 'aria-label':dateLongue(k)+', '+(tot?fmt.duree(tot):'rien'), 'data-focus':'bj-'+i }, [
+      var b=el('button', { type:'button', class:'h-bj'+(ouvre(k)?'':' non-ouvre')+(k===ctx.today?' auj':'')+(rec?' recup':''), 'aria-pressed':String(k===cle),
+        'aria-current':k===ctx.today?'date':null, 'aria-label':dateLongue(k)+', '+(tot?fmt.duree(tot):'rien')+(rec?', récupération':''), 'data-focus':'bj-'+i }, [
         el('span', { class:'h-bj-l', 'aria-hidden':'true' }, [ noms[i], el('span', { class:'h-bj-n', text:String(+k.slice(8)) }) ]),
-        miniHex('bj-'+k, tot/R().dureeJourMin, o),
-        el('span', { class:'h-bj-t', 'aria-hidden':'true', text:tot?fmt.decimal(tot):'–' })
+        miniHex('bj-'+k, tot/objectifJour(k), o),
+        el('span', { class:'h-bj-t', 'aria-hidden':'true', text:tot?fmt.decimal(tot):(rec?'Réc.':'–') })
       ]);
       (function(k){ b.addEventListener('click', function(){ allerA('jour', k); }); })(k);
       wrap.appendChild(b);
@@ -1101,7 +1113,7 @@
 
   // Carte du jour : jauge (durée de la journée), total, reste / dépassement, ligne CRA, frise.
   function carteJour(cle, ctx, o){
-    var plages=plagesAvecVivant(cle, ctx), tot=H.unionMinutes(plages), obj=R().dureeJourMin;
+    var plages=plagesAvecVivant(cle, ctx), tot=H.unionMinutes(plages), obj=objectifJour(cle);
     var dj=H.demiJournees(plages, R());
     var reste=(tot<obj)?'reste '+fmt.duree(obj-tot):((tot>obj)?'+ '+fmt.duree(tot-obj)+' au-delà':'journée complète');
     var texte=el('div', { class:'h-tot' }, [
@@ -1128,8 +1140,13 @@
     if(viv.length && D.chrono) ul.appendChild(ligneEnCours(cle, viv));
     plages.forEach(function(p, i){ ul.appendChild(lignePlage(cle, p, plages[i+1]||null)); });
     var contenu=[ tete ];
+    if(estRecup(cle)){
+      var du=Math.round(H.duJour(R(), cle));
+      contenu.push(el('p', { class:'h-recup' }, [ el('span', { class:'h-recup-badge' }, [ icone('recup', 14), 'Récupération' ]),
+        el('span', { class:'h-recup-txt', text:plages.length?'Jour avec plages : compté normalement.':(du?'− '+fmt.duree(du)+' sur la balance d’heures.':'Jour non ouvré : sans effet sur la balance.') }) ]));
+    }
     if(ul.childNodes.length) contenu.push(ul);
-    else contenu.push(el('p', { class:'h-vide-txt', text:(cle>ctx.today)?'Rien de prévu ce jour.':(cle===ctx.today?'Aucune plage aujourd’hui. Démarrez le chrono, tapez une saisie rapide ou appliquez votre journée type.':'Aucune plage ce jour.') }));
+    else if(!estRecup(cle)) contenu.push(el('p', { class:'h-vide-txt', text:(cle>ctx.today)?'Rien de prévu ce jour.':(cle===ctx.today?(R().saisieRapide?'Aucune plage aujourd’hui. Démarrez le chrono, tapez une saisie rapide ou appliquez votre journée type.':'Aucune plage aujourd’hui. Démarrez le chrono, ajoutez une plage ou appliquez votre journée type.'):'Aucune plage ce jour.') }));
     contenu.push(actionsJour(cle, ctx));
     return el('section', { class:'h-carte h-carte-plages', 'aria-labelledby':'plagesTitre' }, contenu);
   }
@@ -1167,30 +1184,42 @@
   function actionsJour(cle, ctx){
     var wrap=el('div', { class:'h-actions-jour' }), jt=journeeType(), vide=!plagesDe(cle).length, ici=vivantDe(cle, ctx).length>0;
     var c=D.chrono, chronoIci=!!(c && (ici || (c.e==='marche' && T.dates.cle(c.t0)===cle) || (c.e==='pause' && cle===ctx.today)));
-    var primaire=(cle<ctx.today) || !!(c && !chronoIci);
+    var primaire=((cle<ctx.today) || !!(c && !chronoIci)) && !estRecup(cle);     // jour de récupération : aucune action mise en avant
     if(!jt) wrap.appendChild(bouton([ icone('modele', 16), 'Définir ma journée type' ], 'btn', function(){ ouvrirReglages('secJt'); }, { 'data-focus':'jt', 'aria-haspopup':'dialog' }));
     else if(vide && !ici) wrap.appendChild(bouton([ icone('modele', 16), 'Journée type · '+fmt.duree(dureeJt()) ], 'btn'+(primaire?' primary':''), function(){ appliquerJourneeType(cle, 'vide'); }, { 'data-focus':'jt', 'aria-keyshortcuts':'J' }));
     else wrap.appendChild(bouton([ icone('modele', 16), 'Compléter avec la journée type' ], 'btn', function(){ appliquerJourneeType(cle, 'completer'); }, { 'data-focus':'jt', 'aria-keyshortcuts':'J' }));
-    wrap.appendChild(bouton([ icone('plus', 16), 'Plage' ], 'btn'+((vide && !ici && !jt && cle<=ctx.today)?' primary':''), function(e){ ouvrirFeuillePlage(cle, null, null, e.currentTarget); },
+    wrap.appendChild(bouton([ icone('plus', 16), 'Plage' ], 'btn'+((vide && !ici && !jt && cle<=ctx.today && !estRecup(cle))?' primary':''), function(e){ ouvrirFeuillePlage(cle, null, null, e.currentTarget); },
       { 'data-focus':'ajout', 'aria-keyshortcuts':'N', 'aria-label':'Ajouter une plage', 'aria-haspopup':'dialog' }));
     return wrap;
   }
   // Menu ⋯ du jour (divulgation simple) : enregistrer comme journée type, vider le jour.
   function menuJour(cle){
-    if(!plagesDe(cle).length) return null;
+    var aPlages=plagesDe(cle).length>0, rec=estRecup(cle), proposerRecup=rec || ouvre(cle);
+    if(!aPlages && !proposerRecup) return null;
     var ouvert=ui.menu===cle;
     var tog=el('button', { type:'button', class:'btn small ghost iconly h-menu-btn', 'aria-label':'Autres actions du jour', title:'Autres actions', 'aria-expanded':String(ouvert), 'aria-controls':'menuJour', 'data-focus':'menu' }, [ icone('menu', 18) ]);
     var liste=el('div', { class:'h-menu', id:'menuJour', hidden:!ouvert });
-    var bJt=el('button', { type:'button', class:'h-menu-item', 'data-focus':'menu-jt' }, [ icone('modele', 16), el('span', { text:'Enregistrer comme journée type' }) ]);
-    if(journeeType()) deuxTemps(bJt, 'Remplacer la journée type actuelle ?', function(){ fermerMenu(); enregistrerCommeJourneeType(cle); });
-    else bJt.addEventListener('click', function(){ fermerMenu(); enregistrerCommeJourneeType(cle); });
-    var bVider=el('button', { type:'button', class:'h-menu-item danger', 'data-focus':'menu-vider' }, [ icone('corbeille', 16), el('span', { text:'Vider le jour' }) ]);
-    bVider.addEventListener('click', function(){ fermerMenu(); viderJour(cle); });
-    liste.appendChild(bJt); liste.appendChild(bVider);
+    if(aPlages){
+      var bJt=el('button', { type:'button', class:'h-menu-item', 'data-focus':'menu-jt' }, [ icone('modele', 16), el('span', { text:'Enregistrer comme journée type' }) ]);
+      if(journeeType()) deuxTemps(bJt, 'Remplacer la journée type actuelle ?', function(){ fermerMenu(); enregistrerCommeJourneeType(cle); });
+      else bJt.addEventListener('click', function(){ fermerMenu(); enregistrerCommeJourneeType(cle); });
+      liste.appendChild(bJt);
+    }
+    if(proposerRecup){
+      // Jour de récupération (§6.12) : sans plage, il compte − dû dans la balance (solde des heures sup).
+      var bRecup=el('button', { type:'button', class:'h-menu-item', 'data-focus':'menu-recup' }, [ icone('recup', 16), el('span', { text:rec?'Retirer la récupération':'Marquer en récupération' }) ]);
+      bRecup.addEventListener('click', function(){ fermerMenu(); basculerRecup(cle); });
+      liste.appendChild(bRecup);
+    }
+    if(aPlages){
+      var bVider=el('button', { type:'button', class:'h-menu-item danger', 'data-focus':'menu-vider' }, [ icone('corbeille', 16), el('span', { text:'Vider le jour' }) ]);
+      bVider.addEventListener('click', function(){ fermerMenu(); viderJour(cle); });
+      liste.appendChild(bVider);
+    }
     function fermerMenu(rendreFocus){ ui.menu=null; liste.hidden=true; tog.setAttribute('aria-expanded', 'false'); if(rendreFocus) focusSur(tog); }
     tog.addEventListener('click', function(){
       if(ui.menu===cle){ fermerMenu(); return; }
-      ui.menu=cle; liste.hidden=false; tog.setAttribute('aria-expanded', 'true'); focusSur(bJt);
+      ui.menu=cle; liste.hidden=false; tog.setAttribute('aria-expanded', 'true'); focusSur(liste.firstChild);
     });
     liste.addEventListener('keydown', function(e){ if(e.key==='Escape'){ e.preventDefault(); fermerMenu(true); } });
     return el('div', { class:'h-menu-wrap' }, [ tog, liste ]);
@@ -1415,11 +1444,11 @@
     for(var i=0;i<lignes*7;i++){
       var n=i-decal+1;
       if(n<1 || n>nb){ grille.appendChild(el('span', { class:'h-alv hors', 'aria-hidden':'true' })); continue; }
-      var cle=prefixe+pad2(n), r=resume[n]||null, tot=r?r.min:0, niv=borner(tot/R().dureeJourMin, 0, 1);
-      var cls='h-alv'+(ouvre(cle)?'':' non-ouvre')+(cle>ctx.today?' futur':'')+(cle===ctx.today?' auj':'')+(tot>R().dureeJourMin?' depasse':'')+(tot?' plein':'');
+      var cle=prefixe+pad2(n), r=resume[n]||null, tot=r?r.min:0, objJ=objectifJour(cle), niv=borner(tot/objJ, 0, 1), rec=estRecup(cle);
+      var cls='h-alv'+(ouvre(cle)?'':' non-ouvre')+(cle>ctx.today?' futur':'')+(cle===ctx.today?' auj':'')+(tot>objJ?' depasse':'')+(tot?' plein':'')+(rec?' recup':'');
       var dj=r?{ am:r.am, pm:r.pm }:{ am:false, pm:false };
       var b=el('button', { type:'button', class:cls, 'data-cle':cle, 'data-focus':'alv-'+cle, tabindex:cle===cleFocusable?'0':'-1', 'aria-current':cle===ctx.today?'date':null,
-        'aria-label':dateLongue(cle)+' : '+(tot?fmt.duree(tot)+', équivalent CRA '+libelleCraLong(dj):'rien') });
+        'aria-label':dateLongue(cle)+' : '+(tot?fmt.duree(tot)+', équivalent CRA '+libelleCraLong(dj):'rien')+(rec?', récupération':'') });
       b.style.setProperty('--diag', String(Math.floor(i/7)+(i%7)));
       var liq=el('span', { class:'h-alv-liq' });
       versValeur(liq, '--niv', 'alv-'+cle, niv, o.anim, 0);
@@ -1427,7 +1456,7 @@
       contour.appendChild(svgEl('polygon', { points:'50,2 98,26 98,74 50,98 2,74 2,26', 'vector-effect':'non-scaling-stroke' }));
       b.appendChild(el('span', { class:'h-alv-forme', 'aria-hidden':'true' }, [ el('span', { class:'h-alv-fond' }, [ liq ]), contour ]));
       b.appendChild(el('span', { class:'h-alv-num', 'aria-hidden':'true', text:String(n) }));
-      if(tot) b.appendChild(el('span', { class:'h-alv-tot', 'aria-hidden':'true', text:fmt.decimal(tot) }));
+      if(tot || rec) b.appendChild(el('span', { class:'h-alv-tot', 'aria-hidden':'true', text:tot?fmt.decimal(tot):'Réc.' }));
       if(r) b.appendChild(pastilleCra(dj, 'h-alv-cra'));
       (function(cle){ b.addEventListener('click', function(){ allerA('jour', cle); }); })(cle);
       grille.appendChild(b);
@@ -1521,8 +1550,9 @@
     focusSur((cle && (trouverFocus($('vue'), cle)||trouverFocus($('pointeuse'), cle)))||repli||$('vueTitre'));
   }
 
-  var fp={ ouvert:false, cle:'', id:null, o:'s', s:null, p:'', relacher:null, cleRetour:null, nouveau:false };
+  var fp={ ouvert:false, cle:'', id:null, o:'s', s:null, p:'', relacher:null, cleRetour:null, nouveau:false, pauseAutre:false, pauseDebutManuel:false };
   var FP={ feuille:$('feuillePlage'), voile:$('plageVoile'), titre:$('plageTitre'), rapide:$('plageRapide'), rapideBloc:$('plageRapideBloc'), apercu:$('plageRapideApercu'),
+    pauseBloc:$('plagePauseBloc'), pausePuces:$('plagePausePuces'), pauseDej:$('plagePauseDej'), pauseChamps:$('plagePauseChamps'), pause:$('plagePause'), pauseDebut:$('plagePauseDebut'), pauseNote:$('plagePauseNote'),
     detail:$('plageDetail'), debut:$('plageDebut'), fin:$('plageFin'), minuit:$('plageMinuit'), lendemain:$('plageLendemain'), lendemainBloc:$('plageLendemainBloc'),
     maintenant:$('plageMaintenant'), demi:$('plageDemi'), duree:$('plageDuree'), chevauche:$('plageChevauche'), erreur:$('plageErreur'), puces:$('plageProjetsPuces'),
     note:$('plageNote'), compte:$('plageNoteCompte'), supprimer:$('plageSupprimer'), reprendre:$('plageReprendre'), enregistrer:$('plageEnregistrer') };
@@ -1557,18 +1587,44 @@
     FP.lendemain.checked=false;
     FP.note.value=plage?plage.n:'';
     FP.rapide.value='';
-    FP.rapideBloc.hidden=!!plage;
+    // Saisie rapide : masquée (hidden, hors tabulation) si le réglage est désactivé (défaut).
+    FP.rapideBloc.hidden=!!plage || !R().saisieRapide;
     FP.supprimer.hidden=!plage; FP.reprendre.hidden=!plage;
     FP.maintenant.hidden=(cle!==aujourdHui());
     FP.erreur.hidden=true;
+    fp.pauseAutre=false; fp.pauseDebutManuel=false; FP.pause.value='0'; FP.pauseDebut.value='';
+    majPuceDej();
     construireChoixProjet(FP.puces, fp.p, choisirProjetPlage);
     majFeuillePlage();
     if(!fp.ouvert){
       fp.cleRetour=(declencheur && declencheur.getAttribute)?declencheur.getAttribute('data-focus'):null;
       fp.ouvert=true;
       ouvrirSurface(FP.feuille, FP.voile);
-      fp.relacher=T.gererModale(FP.feuille, declencheur||null, plage?FP.fin:FP.rapide, fermerFeuillePlage);
+      fp.relacher=T.gererModale(FP.feuille, declencheur||null, plage?FP.fin:(FP.rapideBloc.hidden?FP.debut:FP.rapide), fermerFeuillePlage);
     }
+  }
+  // Pause : '' → 0 ; minutes entières ≥ 0, sinon NaN (erreur reliée au champ).
+  function lirePause(){
+    var t=String(FP.pause.value).trim();
+    if(t==='') return 0;
+    var n=Number(t.replace(',', '.'));
+    return (Number.isInteger(n) && n>=0)?n:NaN;
+  }
+  // Puce « Pause déj. » : réglage pauseDejMin s'il diffère des puces fixes (jamais présélectionnée).
+  var PAUSES_FIXES=[0,30,45,60,90];
+  function pauseDej(){ var v=R().pauseDejMin; return (v>0 && PAUSES_FIXES.indexOf(v)===-1)?v:0; }
+  function majPuceDej(){
+    var v=pauseDej();
+    FP.pauseDej.hidden=!v; FP.pauseDej.setAttribute('data-pause', v?String(v):'');
+    FP.pauseDej.textContent=v?'Pause déj. '+fmt.duree(v):'';
+  }
+  function majPausePuces(){
+    var p=lirePause(), preset=!fp.pauseAutre && (PAUSES_FIXES.indexOf(p)!==-1 || (p>0 && p===pauseDej()));
+    Array.prototype.forEach.call(FP.pausePuces.querySelectorAll('[data-pause]'), function(b){
+      var v=b.getAttribute('data-pause');
+      b.setAttribute('aria-pressed', String(v==='autre'?!preset:(v!=='' && preset && +v===p)));
+    });
+    FP.pauseChamps.hidden=!(fp.pauseAutre || !(p===0));
   }
   function fermerFeuillePlage(rendreFocus){
     if(!fp.ouvert) return;
@@ -1592,16 +1648,32 @@
     var traverse=!minuit && f<=d;
     FP.lendemainBloc.hidden=!traverse;
     if(!traverse) FP.lendemain.checked=false;
-    var parJour={}, duree;
+    // Pause indisponible pour une plage qui traverse minuit (deux jours) : fieldset désactivé + note.
+    FP.pauseBloc.disabled=traverse; FP.pauseNote.hidden=!traverse;
+    majPausePuces();
+    var parJour={}, duree, pause=null;
     if(traverse){
       if(!FP.lendemain.checked) return { erreur:(f===d)?'Durée nulle : la fin doit suivre le début.':'La fin précède le début : cochez « Se termine le lendemain » ou corrigez.', champ:FP.fin };
       parJour[fp.cle]=[{ d:d, f:1440 }];
       var lendemain=T.dates.ajouterJours(fp.cle, 1);
       if(f>0 && T.dates.cleValide(lendemain)) parJour[lendemain]=[{ d:0, f:f }];
       duree=1440-d+f;
-    } else { parJour[fp.cle]=[{ d:d, f:f }]; duree=f-d; }
+    } else {
+      var p=lirePause();
+      if(!isFinite(p)) return { erreur:'Durée de pause invalide (minutes entières).', champ:FP.pause };
+      if(p>0 && f>d){
+        // Début de pause : prérempli (coupure, sinon milieu) tant qu'il n'a pas été modifié à la main.
+        var dp=fp.pauseDebutManuel?minutes(FP.pauseDebut.value):null;
+        if(fp.pauseDebutManuel && !isFinite(dp)) return { erreur:'Début de pause invalide.', champ:FP.pauseDebut };
+        var dec=H.decouperPause(d, f, p, dp, R().coupure);
+        if(dec.erreur) return { erreur:dec.erreur.message, champ:dec.erreur.code==='pause-trop-longue'?FP.pause:FP.pauseDebut };
+        if(!fp.pauseDebutManuel){ var auto=versHHMM(dec.debutPause); if(FP.pauseDebut.value!==auto) FP.pauseDebut.value=auto; }
+        parJour[fp.cle]=dec.plages.map(function(x){ return { d:minutes(x.d), f:minutes(x.f) }; });
+        duree=f-d-p; pause={ min:p, plages:dec.plages, d:d, f:f };        // d, f : enveloppe (pause comprise)
+      } else { parJour[fp.cle]=[{ d:d, f:f }]; duree=f-d; }
+    }
     if(duree<1) return { erreur:'Durée nulle.', champ:FP.fin };
-    return { parJour:parJour, duree:duree, traverse:traverse };
+    return { parJour:parJour, duree:duree, traverse:traverse, pause:pause };
   }
   function descriptionsChevauchement(parJour){
     var msgs=[];
@@ -1636,15 +1708,21 @@
       var c=candidatTuiles();
       // Aucun aria-invalid / aria-describedby périmé sur l'autre tuile ; l'erreur n'est ANNONCÉE
       // qu'à la tentative d'enregistrement (#plageErreur sans role=alert : pas d'annonce par frappe).
-      [ FP.debut, FP.fin ].forEach(function(t){ t.removeAttribute('aria-invalid'); t.removeAttribute('aria-describedby'); });
+      [ FP.debut, FP.fin, FP.pause, FP.pauseDebut ].forEach(function(t){ t.removeAttribute('aria-invalid'); t.removeAttribute('aria-describedby'); });
       if(c.erreur){ FP.duree.textContent=''; FP.erreur.textContent=c.erreur; FP.erreur.hidden=false; c.champ.setAttribute('aria-invalid', 'true'); c.champ.setAttribute('aria-describedby', 'plageErreur'); }
       else {
         FP.erreur.hidden=true;
-        FP.duree.textContent='Durée : '+fmt.duree(c.duree)+(c.traverse?' · traverse minuit':'');
+        // Aperçu en direct : « 09:00 → 12:30 · 13:30 → 17:00 · 7 h » avec pause, sinon « Durée : 8 h ».
+        FP.duree.textContent=c.pause
+          ?c.pause.plages.map(function(x){ return x.d+' → '+x.f; }).join(' · ')+' · '+fmt.duree(c.duree)
+          :'Durée : '+fmt.duree(c.duree)+(c.traverse?' · traverse minuit':'');
         parJour=c.parJour;
       }
     }
-    var msgs=parJour?descriptionsChevauchement(parJour):[];
+    // Avec pause : UNE simulation sur l'enveloppe (comme l'enregistrement, H.insererAvecPause).
+    var simul=parJour;
+    if(parJour && !parRapide && c.pause){ simul={}; simul[fp.cle]=[{ d:c.pause.d, f:c.pause.f }]; }
+    var msgs=simul?descriptionsChevauchement(simul):[];
     FP.chevauche.hidden=!msgs.length;
     FP.chevauche.textContent=msgs.join(' · ');
   }
@@ -1662,9 +1740,18 @@
     var r=muter(id?'Modifier la plage':'Ajouter une plage', function(e){
       if(id && !(e.jours[cle]||[]).some(function(x){ return x.id===id; })) throw new Error('Plage modifiée dans un autre onglet — rouvrez-la.');
       if(p && !e.projets.some(function(x){ return x.id===p; })) p='';
+      if(c.pause){
+        // « La plus récente gagne » sur l'ENVELOPPE (pause comprise), puis les deux morceaux (règle pure, taf.js).
+        // Édition : le 1er morceau garde l'id (et la session), le 2e en reçoit un neuf.
+        var nv={ id:id||T.id('h'), d:versHHMM(c.pause.d), f:versHHMM(c.pause.f), p:p, n:note, o:id?o:'s' };
+        if(id && s) nv.s=s;
+        var insP=H.insererAvecPause(e.jours[cle]||[], nv, c.pause.plages);
+        e.jours[cle]=insP.plages; rognees=insP.rognees;
+        return;
+      }
       Object.keys(c.parJour).forEach(function(k){
-        c.parJour[k].forEach(function(x){
-          var edition=!!(id && k===cle);
+        c.parJour[k].forEach(function(x, i){
+          var edition=!!(id && k===cle && i===0);
           if(!edition && (e.jours[k]||[]).length>=LIM.plagesJour) throw new Error(LIM.plagesJour+' plages par jour au plus.');
           var pl={ id:edition?id:T.id('h'), d:versHHMM(x.d), f:versHHMM(x.f), p:p, n:note, o:id?o:'s' };
           if(edition && s) pl.s=s;
@@ -1675,7 +1762,7 @@
     });
     if(!r) return;
     fermerFeuillePlage();
-    toastAnnulable((id?'Plage modifiée':'Plage ajoutée')+' · '+fmt.duree(c.duree)+suffixeRognees(rognees), r.entree);
+    toastAnnulable((id?'Plage modifiée':(c.pause?'2 plages ajoutées':'Plage ajoutée'))+' · '+fmt.duree(c.duree)+(c.pause?' (pause '+fmt.duree(c.pause.min)+')':'')+suffixeRognees(rognees), r.entree);
   }
   function supprimerPlage(cle, id, focusApres){
     var plage=plagesDe(cle).filter(function(x){ return x.id===id; })[0];
@@ -1740,7 +1827,17 @@
   }
   function brancherFeuillePlage(){
     brancherTuiles(FP.feuille);
-    [FP.debut, FP.fin, FP.minuit, FP.lendemain, FP.rapide, FP.note].forEach(function(n){ n.addEventListener('input', majFeuillePlage); n.addEventListener('change', majFeuillePlage); });
+    [FP.debut, FP.fin, FP.minuit, FP.lendemain, FP.rapide, FP.note, FP.pause].forEach(function(n){ n.addEventListener('input', majFeuillePlage); n.addEventListener('change', majFeuillePlage); });
+    ['input','change'].forEach(function(t){ FP.pauseDebut.addEventListener(t, function(){ fp.pauseDebutManuel=FP.pauseDebut.value!==''; majFeuillePlage(); }); });
+    // Puces de pause : Aucune / 30 / 45 / 1 h / 1 h 30 / Pause déj. (début recalculé), « Autre… » ouvre la saisie libre.
+    Array.prototype.forEach.call(FP.pausePuces.querySelectorAll('[data-pause]'), function(b){
+      b.addEventListener('click', function(){
+        var v=b.getAttribute('data-pause');
+        if(v==='autre'){ fp.pauseAutre=true; majFeuillePlage(); focusSur(FP.pause); try{ FP.pause.select(); }catch(e){} return; }
+        fp.pauseAutre=false; fp.pauseDebutManuel=false; FP.pause.value=v;
+        majFeuillePlage();
+      });
+    });
     FP.rapide.addEventListener('keydown', function(e){ if(e.key==='Enter' && !e.isComposing){ e.preventDefault(); enregistrerPlage(); } });
     FP.feuille.addEventListener('keydown', function(e){
       if(e.key==='Enter' && !e.isComposing && e.target && e.target.tagName==='INPUT' && e.target.type!=='checkbox' && e.target!==FP.rapide){ e.preventDefault(); enregistrerPlage(); }
@@ -1808,7 +1905,7 @@
          la session (pauses visibles), début, projet, note, Démarrer
          à… / Arrêter à…, confirmation intégrée (> 24 h).
   ============================================================ */
-  var fc={ ouvert:false, relacher:null, section:null, pRepos:null, nRepos:'', changement:null, confirm:null, chiffres:null, cleRetour:null, sig:'', autreDebut:false, autreFin:false };
+  var fc={ ouvert:false, relacher:null, section:null, pRepos:null, nRepos:'', changement:null, confirm:null, recap:null, cleRetour:null, sig:'', autreDebut:false, autreFin:false };
   var FC={ feuille:$('feuilleChrono'), voile:$('chronoVoile'), titre:$('chronoTitre'), corps:$('chronoCorps'), pied:$('chronoPied') };
   var CIBLES_SECTION={ demarrerA:['fc-dem-0'], arreterA:['fc-arr-0','fc-arr-autre'], debut:['fc-debut'], projet:['fc-projet'], confirm:['fc-confirm'] };
   function cibleSection(section){
@@ -1831,14 +1928,13 @@
       fc.ouvert=true;
       ouvrirSurface(FC.feuille, FC.voile);
       fc.relacher=T.gererModale(FC.feuille, declencheur||null, cible, fermerFeuilleChrono);
-      majChiffres(maintenant());
     } else focusSur(cible);
     if(section && cible && cible.scrollIntoView) setTimeout(function(){ try{ cible.scrollIntoView({ block:'nearest' }); }catch(e){} }, 80);
   }
   function fermerFeuilleChrono(rendreFocus){
     if(!fc.ouvert) return;
     viderNote();
-    fc.ouvert=false; fc.confirm=null; fc.changement=null; fc.chiffres=null;
+    fc.ouvert=false; fc.confirm=null; fc.changement=null; fc.recap=null;
     fermerSurface(FC.feuille, FC.voile);
     if(fc.relacher){ fc.relacher(rendreFocus!==false); fc.relacher=null; }
     if(rendreFocus!==false) rendreFocusApres(fc.cleRetour, pt.hex);
@@ -1848,24 +1944,20 @@
   }
   function rendreFeuilleChrono(ctx){
     var c=D.chrono, etat=etatChrono();
-    var sig=[etat, c?c.s:'', c?c.t0:'', c?c.tp:'', c?c.p:fc.pRepos, JSON.stringify(D.projets), JSON.stringify(fc.confirm), fc.changement||'', fc.autreDebut, fc.autreFin, R().secondes].join('|');
-    if(sig===fc.sig){ majSegmentsChrono(ctx); return; }
+    var sig=[etat, c?c.s:'', c?c.t0:'', c?c.tp:'', c?c.p:fc.pRepos, JSON.stringify(D.projets), JSON.stringify(fc.confirm), fc.changement||'', fc.autreDebut, fc.autreFin].join('|');
+    if(sig===fc.sig){ majRecapChrono(ctx); majSegmentsChrono(ctx); return; }
     fc.sig=sig;
     var focus=cleFocus(FC.feuille);
     T.vider(FC.corps); T.vider(FC.pied);
     FC.titre.textContent=(etat==='marche')?'Chrono en marche':(etat==='pause'?'Chrono en pause':'Chrono');
 
-    // Affichage
-    var ch={ h:el('span', { class:'pt-h' }), m:el('span', { class:'pt-m' }), s:el('span', { class:'pt-s' }) };
-    fc.chiffres=ch;
-    var sous=(etat==='marche')?(c.p?nomProjet(c.p)+' · ':'')+'depuis '+heureRelative(c.t0, ctx.today)
-      :(etat==='pause'?'En pause depuis '+heureRelative(c.tp, ctx.today):'Prêt à démarrer');
-    var aff=el('div', { class:'fc-affichage', 'data-etat':etat }, [
-      el('span', { class:'fc-chiffres', role:'timer', 'aria-live':'off', 'aria-label':'Durée de la session' }, [ el('span', { class:'pt-hm' }, [ ch.h, el('span', { class:'pt-sep', text:':' }), ch.m ]), ch.s ]),
-      el('p', { class:'fc-sous', text:sous })
-    ]);
-    FC.corps.appendChild(aff);
-    poserChiffres(ch, chiffresDe(ctx.now), false);
+    // Récapitulatif NON défilant (mis à jour à la minute) : session en cours, sinon total du jour
+    fc.recap=el('b', { class:'fc-recap-val' });
+    FC.corps.appendChild(el('div', { class:'fc-affichage', 'data-etat':etat }, [
+      el('p', { class:'fc-recap' }, [ el('span', { class:'fc-recap-lib', text:c?'Session':'Aujourd’hui' }), fc.recap ]),
+      el('p', { class:'fc-sous', text:(function(le){ return le.mot+le.suite; })(ligneEtat(c, ctx))+((c && c.p)?' · '+nomProjet(c.p):'') })
+    ]));
+    majRecapChrono(ctx);
     if(c && c.e==='marche' && ctx.now<c.t0) FC.corps.appendChild(el('p', { class:'h-avertissement', role:'alert' }, [ icone('alerte', 16), el('span', { text:'L’horloge de l’appareil a reculé : la durée affichée vaut 0.' }) ]));
 
     // Confirmation intégrée : session de plus de 24 h
@@ -1998,6 +2090,14 @@
     var r=demarrerChrono(t0, { p:fc.pRepos||'', n:fc.nRepos });
     if(r){ fc.nRepos=''; fermerFeuilleChrono(); }
   }
+  function majRecapChrono(ctx){
+    if(!fc.recap) return;
+    var c=D.chrono, v;
+    if(c){ v=minutesSession(c.s); if(c.e==='marche') v+=Math.max(0, Math.floor((ctx.now-c.t0)/60000)); }
+    else v=totalJour(ctx.today, ctx);
+    var t=fmt.duree(v);
+    if(fc.recap.textContent!==t) fc.recap.textContent=t;
+  }
   function majSegmentsChrono(ctx){
     var zone=fc.segments, c=D.chrono;
     if(!zone || !c) return;
@@ -2106,6 +2206,24 @@
     var r=muter('Enregistrer la journée type', function(e){ var o=clone(e.reglages); o.journeeType=jt; e.reglages=H.validerReglages(o, e.projets); });
     if(r) toastAnnulable('Journée type enregistrée · '+fmt.duree(dureeJt())+(pl.length>LIM.journeeType?' ('+LIM.journeeType+' premières plages)':''), r.entree);
   }
+  // Jour de récupération (§6.12) : bascule dans D.recup via muter() (Annuler).
+  function basculerRecup(cle){
+    if(!T.dates.cleValide(cle)) return;
+    var avant=estRecup(cle), b0=balanceCourante(contexte(maintenant())).min;
+    ui.focusApres='menu';                                          // rendu synchrone dans muter() : focus rendu au bouton ⋯
+    var r=muter(avant?'Retirer la récupération':'Marquer en récupération', function(e){
+      var l=(Array.isArray(e.recup)?e.recup:[]).filter(function(k){ return k!==cle; });
+      if(!avant){ if(l.length>=LIM.recup) throw new Error(LIM.recup+' jours de récupération au plus.'); l.push(cle); l.sort(); }
+      e.recup=l;
+    });
+    if(!r || r.inchange){ ui.focusApres=null; return; }
+    // Effet annoncé = écart RÉEL de balance avant / après (règle unique TAF.heures.balance,
+    // segment du chrono en cours compris) : jamais une seconde estimation qui pourrait diverger.
+    memoBalance.D=null;
+    var ecart=balanceCourante(contexte(maintenant())).min-b0;
+    var effet=ecart?' · '+(ecart>0?'+ ':'− ')+fmt.duree(Math.abs(ecart))+' sur la balance':'';
+    toastAnnulable((avant?'Récupération retirée':'Jour de récupération')+effet, r.entree, 'info');
+  }
   function viderJour(cle){
     var n=plagesDe(cle).length; if(!n) return;
     var r=muter('Vider le jour', function(e){ delete e.jours[cle]; });
@@ -2192,7 +2310,17 @@
     if(!journeeType()){ ouvrirReglages('secJt'); return; }
     appliquerJourneeType(cle, plagesDe(cle).length?'completer':'vide');
   }
+  // Saisie rapide masquée par défaut (réglage saisieRapide) : carte gauche, raccourci « / » et ses aides.
+  function majVisibiliteSaisieRapide(){
+    var on=!!R().saisieRapide, carte=$('rapideCarte');
+    if(carte.hidden===on){
+      carte.hidden=!on;
+      if(!on && rapideG.value){ rapideG.value=''; majRapideG(); }
+    }
+    [ 'rRaccourciRapide', 'rProjetsVideRapide' ].forEach(function(id){ var n=$(id); if(n) n.hidden=!on; });
+  }
   function rendreExtras(ctx){
+    majVisibiliteSaisieRapide();
     var cle=cibleJour(), jt=journeeType(), b=$('jtGauche');
     $('rapideGLib').textContent='Saisie rapide · '+(cle===ctx.today?'aujourd’hui':fmt.dateCourte(cle));
     var lib=!jt?'Définir ma journée type':(plagesAvecVivant(cle, ctx).length?'Compléter avec la journée type':'Journée type · '+fmt.duree(dureeJt()));
@@ -2212,7 +2340,7 @@
   ============================================================ */
   var RG={ obj:$('rObjHebdo'), duree:$('rDureeJour'), jours:$('rJours'), debut:$('rDebut'), pause:$('rPause'), coupure:$('rCoupure'),
     seuilAuto:$('rSeuilAuto'), seuilAutoTxt:$('rSeuilAutoTxt'), seuil:$('rSeuil'), seuilBloc:$('rSeuilBloc'), rattrapage:$('rRattrapage'), exemple:$('rExemple'),
-    arrondi:$('rArrondi'), alerte:$('rAlerte'), projetDem:$('rProjetDemarrage'), secondes:$('rSecondes'), vibration:$('rVibration'), auto:$('rAuto'),
+    arrondi:$('rArrondi'), alerte:$('rAlerte'), projetDem:$('rProjetDemarrage'), saisieRapide:$('rSaisieRapide'), balanceAide:$('rBalanceAide'), balanceDepuis:$('rBalanceDepuis'), balanceZero:$('rBalanceZero'), vibration:$('rVibration'), auto:$('rAuto'),
     raccourcis:$('rRaccourcis'), rappel:$('rRappel'), jtListe:$('rJtListe'), jtErreur:$('rJtErreur'), projets:$('rProjets'), projetsVide:$('rProjetsVide'),
     projetNom:$('rProjetNom'), projetErreur:$('rProjetErreur'), persistEtat:$('rPersistEtat'), persist:$('rPersist'), import:$('rImport'), fichier:$('rFichier') };
   var jtEdition=null, sigProjets='';
@@ -2272,7 +2400,13 @@
     Array.prototype.forEach.call(doc.querySelectorAll('input[name="rMode"]'), function(r){ r.addEventListener('change', function(){ if(r.checked) appliquerReglage('modeArrondi', r.value); }); });
     RG.alerte.addEventListener('change', function(){ appliquerReglage('alerteOubliMin', heuresVersMinutes(RG.alerte, 0), RG.alerte, 'Entre 2 et 24 heures.'); });
     RG.projetDem.addEventListener('change', function(){ appliquerReglage('projetDemarrage', RG.projetDem.value); });
-    RG.secondes.addEventListener('change', function(){ appliquerReglage('secondes', RG.secondes.checked); });
+    RG.saisieRapide.addEventListener('change', function(){ appliquerReglage('saisieRapide', RG.saisieRapide.checked); });
+    RG.balanceDepuis.addEventListener('change', function(){ var v=RG.balanceDepuis.value; appliquerReglage('balanceDepuis', v===''?null:v, RG.balanceDepuis, 'Date invalide (entre 2000 et 2100).'); });
+    RG.balanceZero.addEventListener('click', function(){
+      var auj=aujourdHui();
+      var r=muter('Remettre la balance à zéro', function(e){ var x=clone(e.reglages); x.balanceDepuis=auj; e.reglages=H.validerReglages(x, e.projets); });
+      if(r && !r.inchange){ erreurChamp(RG.balanceDepuis, null); majReglagesUI(); toastAnnulable('Balance comptée depuis aujourd’hui ('+fmt.dateFr(auj)+')', r.entree, 'info'); }
+    });
     RG.vibration.addEventListener('change', function(){ appliquerReglage('vibration', RG.vibration.checked); });
     RG.auto.addEventListener('change', function(){ appliquerReglage('autoPointer', RG.auto.checked); });
     RG.raccourcis.addEventListener('change', function(){ appliquerReglage('raccourcis', RG.raccourcis.checked); });
@@ -2331,7 +2465,7 @@
     RG.rattrapage.checked=r.rattrapage; RG.arrondi.value=String(r.arrondiMin);
     Array.prototype.forEach.call(doc.querySelectorAll('input[name="rMode"]'), function(x){ x.checked=x.value===r.modeArrondi; });
     valeurSiLibre(RG.alerte, fmtHeures(r.alerteOubliMin)); RG.projetDem.value=r.projetDemarrage;
-    RG.secondes.checked=r.secondes; RG.vibration.checked=r.vibration; RG.auto.checked=r.autoPointer; RG.raccourcis.checked=r.raccourcis;
+    RG.saisieRapide.checked=r.saisieRapide; RG.balanceAide.textContent='Balance d’heures (chrono) : '+aideBalance(); valeurSiLibre(RG.balanceDepuis, r.balanceDepuis||''); RG.vibration.checked=r.vibration; RG.auto.checked=r.autoPointer; RG.raccourcis.checked=r.raccourcis;
     RG.rappel.value=String(r.rappelSauvegardeJours);
     majExemple();
     if(jtEdition===null) majJtEditeur();
@@ -2607,7 +2741,7 @@
       var r=muter('Importer une sauvegarde', function(e){
         var j=Object.create(null);
         Object.keys(d.jours).forEach(function(k){ j[k]=clone(d.jours[k]); });
-        e.jours=j; e.chrono=clone(d.chrono); e.projets=clone(d.projets); e.reglages=clone(d.reglages); e.meta=clone(d.meta); e.meta.accueilVu=true;
+        e.jours=j; e.chrono=clone(d.chrono); e.projets=clone(d.projets); e.reglages=clone(d.reglages); e.recup=clone(d.recup); e.meta=clone(d.meta); e.meta.accueilVu=true;
       });
       T.vider(RG.import); RG.import.hidden=true;
       if(r){ sigProjets=''; jtEdition=null; majReglagesUI(); toastAnnulable('Sauvegarde importée · '+pluriel(nbP, 'plage'), r.entree); focusSur($('rImporter')); }
@@ -2681,6 +2815,7 @@
   }
   function surfaceOuverte(){ return !!doc.querySelector('[role="dialog"][aria-hidden="false"]'); }
   function ouvrirSaisieRapide(){
+    if(!R().saisieRapide) return;
     var g=$('gaucheExtras');
     if(g && g.offsetParent!==null && global.getComputedStyle(g).display!=='none'){ focusSur(rapideG); try{ rapideG.select(); }catch(e){} return; }
     ouvrirFeuillePlage(cibleJour(), null, null, null);
@@ -2702,7 +2837,7 @@
         case 't': case 'T': e.preventDefault(); allerAujourdhui(); break;
         case 'ArrowLeft': e.preventDefault(); deplacer(-1); break;
         case 'ArrowRight': e.preventDefault(); deplacer(1); break;
-        case '/': e.preventDefault(); ouvrirSaisieRapide(); break;
+        case '/': if(!R().saisieRapide) return; e.preventDefault(); ouvrirSaisieRapide(); break;
         case '1': e.preventDefault(); allerA('jour', ui.ref); break;
         case '2': e.preventDefault(); allerA('semaine', ui.ref); break;
         case '3': e.preventDefault(); allerA('mois', ui.ref); break;

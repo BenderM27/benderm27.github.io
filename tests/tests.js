@@ -449,13 +449,12 @@
   });
 
   /* ---------- Navigation : pastille « en cours » (pure) ---------- */
-  test('nav.etatPastille : marche « HH:MM » / pause / rien', function(){
+  test('nav.etatPastille : point seul (marche / pause / rien), sans durée ni rafraîchissement', function(){
     var maintenant=Date.UTC(2026, 9, 14, 12, 0, 0);
     egal(TAF.nav.etatPastille(null, maintenant), null);
-    egal(TAF.nav.etatPastille({ e:'pause', tp:maintenant, s:'s_aaaaaaaaaa' }, maintenant).texte, 'pause');
-    var e=TAF.nav.etatPastille({ e:'marche', t0:maintenant-(134*60000+30000) }, maintenant);
-    egal([ e.etat, e.texte, e.libelle, e.prochaine ], [ 'marche', '02:14', 'chrono en cours depuis 2 heures 14 minutes', 30000 ]);
-    egal(TAF.nav.etatPastille({ e:'marche', t0:maintenant+5000 }, maintenant).texte, '00:00', 'horloge reculée → 0');
+    egal(TAF.nav.etatPastille({ e:'pause', tp:maintenant, s:'s_aaaaaaaaaa' }, maintenant), { etat:'pause', libelle:'chrono en pause', prochaine:null });
+    egal(TAF.nav.etatPastille({ e:'marche', t0:maintenant-(134*60000+30000) }, maintenant), { etat:'marche', libelle:'chrono en cours', prochaine:null });
+    egal(TAF.nav.etatPastille({ e:'marche', t0:'abc' }, maintenant), null, 't0 invalide');
   });
 
   /* ---------- Impression (F12) ---------- */

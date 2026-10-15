@@ -107,10 +107,12 @@ div#toasts (role=status)  · div#liveHeures (aria-live polite, sr-only)
 | Palier | Disposition |
 |---|---|
 | **Mobile < 700** | Une colonne. `nav.vues` est un contrôle segmenté collant sous la topbar (`top: calc(var(--topbar-h) + env(safe-area-inset-top))`). La **Pointeuse en dock** (64 px) est fixée au-dessus de la barre d'onglets de modules (56 px + safe-area). Contenu : `padding-bottom: calc(var(--dock-h) + var(--tabbar-h) + env(safe-area-inset-bottom) + 16px)`. Toasts empilés au-dessus du dock. |
-| ≤ 389 | Hexagone du dock à 52 px, chiffres à `clamp(18px,5.5vw,22px)`, puce de projet masquée du dock (visible dans la feuille Chrono). |
+| < 480 | Projet masqué du dock (visible dans la ligne « En cours » et la feuille Chrono) ; tuiles Début / Fin de la feuille Plage sur une colonne. |
+| ≤ 389 | Hexagone du dock à 52 px, balance à `clamp(17px,5.3vw,20px)`. |
+| < 360 | Ligne d'état réduite à « Depuis 09:02 » (la pastille hexagonale pleine / demie porte l'état) : rien n'est rogné à 320 px, chrono en marche compris. |
 | Paysage court (hauteur ≤ 500) | Dock compact de 52 px, frise du jour masquée (la liste suffit), segmenté de 40 px, jauges en ligne. |
 | **Tablette 700–1023** | Bascule de modules dans la topbar (pas de barre basse). Colonne centrée `max-width: 760px`. **Pointeuse en pilule flottante** centrée en bas (`max-width: 560px`, `--radius`, `--shadow-pop`, safe-area). Semaine : frise pleine largeur. Mois : grille d'alvéoles à gauche et synthèse dessous ; à partir de 900 px, deux colonnes. |
-| **Desktop ≥ 1024** | Grille `minmax(340px,380px) minmax(0,1fr)`, avec un gap de 24 px. **Colonne gauche collante** : carte Pointeuse (chiffres de 48 px, hexagone de 88 px), bouton Journée type, **champ de saisie rapide toujours visible** (focus avec `/`). **Colonne droite** : `nav.vues` puis la vue. |
+| **Desktop ≥ 1024** | Grille `minmax(340px,380px) minmax(0,1fr)`, avec un gap de 24 px. **Colonne gauche collante** : carte Pointeuse (balance de 34 px, hexagone de 88 px), bouton Journée type, **champ de saisie rapide** si `saisieRapide` est activé (masqué par défaut ; focus avec `/`). **Colonne droite** : `nav.vues` puis la vue. |
 | ≥ 1280 | Frises plus hautes (rangées de 56 px). Mois : alvéoles à gauche, synthèse et projets à droite. |
 | ≥ 1600 | Contenu plafonné à `max-width: 1360px`, centré. |
 
@@ -159,9 +161,9 @@ div#toasts (role=status)  · div#liveHeures (aria-live polite, sr-only)
 ### 3.4 Pointeuse (composant chrono unique `#pointeuse`)
 
 - **Contenu commun**
-  - Pastille d'état textuelle (« Prêt », « En marche », « En pause »).
-  - Chiffres `HH:MM:SS` (secondes plus petites, en `--muted`, masquées si `secondes=false`).
-  - Sous-ligne « Projet X · depuis 09:02 » ou « En pause depuis 12:31 · 18 min ».
+  - **Balance d'heures** (§6.12) à la place d'un compteur qui défile : micro-label au-dessus (« Heures sup » / « À rattraper » / « À jour »), valeur dessous (« + 2 h 30 » en vert `--positif`, « − 3 h 15 » en rouge `--negatif`, « 0 min » neutre). La couleur n'est jamais seule : signe + libellé. Jetons `--positif` / `--negatif` dans taf.css, contraste ≥ 4,5:1 sur le dock, la pilule et la carte (y compris le fond teinté d'accent en marche).
+  - Ligne d'état, mise à jour à la minute : pastille hexagonale (creuse / demie / pleine) + « Prêt », « En marche depuis 09:02 » ou « En pause depuis 12:31 », puis « · Projet X » si la place le permet.
+  - Aide (`title` de la zone d'info et texte du tiroir, section « Balance d'heures » `#secBalance`) : texte produit par `aideBalance()` à partir des réglages réels (dû journalier, objectif hebdomadaire, jours ouvrés), cf. §6.12.
   - **Hexagone principal** (60 px en dock, 88 px en carte) et **■ Arrêter** (48 px, visible seulement en marche ou en pause).
   - Bouton ⋯ « Plus d'options » qui ouvre la feuille Chrono.
 - **Encodage par la forme** :
@@ -172,7 +174,7 @@ div#toasts (role=status)  · div#liveHeures (aria-live polite, sr-only)
 - **Tablette** : même contenu en pilule flottante.
 - **Desktop** : carte avec boutons secondaires visibles (« Démarrer à… », « Arrêter à… », « Corriger le début », puce Projet). Ils ouvrent la même feuille Chrono, rendue en dialogue centré de 480 px.
 - **Feuille Chrono** (une seule surface `role=dialog`)
-  - Grand affichage et segments de la session (liste, avec les pauses visibles).
+  - Récapitulatif non défilant mis à jour à la minute (« Session · 3 h 12 » ; au repos « Aujourd'hui · 5 h 10 ») et segments de la session (liste, avec les pauses visibles).
   - « Début 09:02 [−5] [+5] [heure…] » en marche.
   - Choix du projet : puces des 5 projets les plus récents (dérivées des plages), « Tous les projets », « Sans projet », « + Nouveau projet ».
   - Note (≤ 200).
@@ -242,19 +244,20 @@ div#toasts (role=status)  · div#liveHeures (aria-live polite, sr-only)
 ### 3.8 Feuille Plage (ajout / édition)
 - Conteneur : feuille basse < 700 px (poignée, glisser vers le bas > 80 px pour fermer) ; dialogue centré de 480 px au-delà. Même DOM, une classe par palier.
 - Titre « Nouvelle plage · mar. 14 oct. » ou « Modifier la plage ».
-- **Saisie rapide** : `input` texte de 16 px, placeholder « 9-12:30 @projet note ».
+- **Saisie rapide** (seulement si `saisieRapide`, masquée par défaut avec `hidden` : hors de l'ordre de tabulation) : `input` texte de 16 px, placeholder « 9-12:30 @projet note ».
   - Aperçu analysé en direct sous le champ, en puces (« 09:00 → 12:30 · 3 h 30 · Client A »), relié par `aria-describedby`.
   - Erreur en texte avec `aria-invalid`.
   - Entrée valide si l'analyse est OK.
 - **Tuiles Début / Fin** : `input type=time` natif (`step=60`, label visible) et boutons −5 / +5 de 44 px (Maj ou appui long : ±15). « Fin 24:00 » possible par la case « jusqu'à minuit ».
 - Durées rapides : « Maintenant » (fin), « +30 min », « +1 h », « +2 h », « ½ journée » (dureeJour / 2).
-- Durée calculée affichée en direct (annoncée seulement à l'enregistrement).
+- **Pause** (journée complète avec pause, §6.13) : puces Aucune / 30 min / 45 min / 1 h / 1 h 30 / « Pause déj. » (= `pauseDejMin`, seulement si elle diffère, jamais présélectionnée) / « Autre… » (`aria-pressed` + coche). Si pause > 0 : champs « Durée (min) » et « Début de la pause » (`input type=time`), prérempli automatiquement (centré sur la coupure s'il y tient, sinon sur le milieu de la plage) tant qu'il n'est pas modifié à la main. 09:00 → 17:00 avec 1 h donne **deux plages** 09:00–12:30 et 13:30–17:00, enregistrées en **une seule mutation** (un seul Annuler, toast « 2 plages ajoutées · 7 h (pause 1 h) »). Une plage existante sur le créneau est rognée UNE fois sur l’enveloppe (pause comprise, `insererAvecPause`) : rien ne subsiste dans la pause. En édition, le premier morceau garde l’id de la plage. Erreurs (durée invalide, pause trop longue, pause hors plage) reliées au champ fautif par `aria-invalid` / `aria-describedby`, annoncées seulement à l'enregistrement. **Plage qui se termine le lendemain : pause désactivée** (fieldset `disabled` + note « saisissez deux plages »).
+- Durée calculée affichée en direct (annoncée seulement à l'enregistrement) : « Durée : 8 h », ou avec pause « 09:00 → 12:30 · 13:30 → 17:00 · 7 h ».
 - **Encart de chevauchement** si la plage recouvre une plage existante : « Chevauche 13:00–14:00 (Projet B) → sera rognée à 13:00–13:30 ».
 - Projet (puces récentes + « Tous » + « Sans projet » + « + Nouveau »), note (≤ 200, compteur).
 - Pied :
   - édition : [Supprimer] (ghost danger), « Reprendre ▶ » et [Enregistrer] (primaire, pleine largeur en mobile) ;
   - création : [Enregistrer] seul.
-- Focus initial : la saisie rapide pour une création, la tuile Fin pour une édition.
+- Focus initial : la saisie rapide pour une création si elle est affichée, sinon la tuile Début ; la tuile Fin pour une édition.
 
 ### 3.9 Réglages (tiroir)
 Même composant tiroir que le CRA (taf.css) : plein écran glissant < 700 px, `min(440px, 92vw)` à droite au-delà. Sections repliables (`details`/`summary`) : Journée et semaine · Conversion CRA · Chrono · Journée type · Projets · Raccourcis · Mes données Heures · Apparence (section partagée fournie par `TAF.apparence`). Détail au §8.
@@ -315,7 +318,7 @@ Si `meta.accueilVu === false`, une carte « Votre journée type » s'affiche à 
 - Une session de plus de 24 h demande une confirmation intégrée.
 
 **Tick d'affichage**
-- `setTimeout` aligné sur la prochaine seconde (ou minute si `secondes=false`). Il ne modifie que des `textContent`.
+- `setTimeout` aligné sur la prochaine **minute** (plus rien ne défile à la seconde : balance, ligne d'état, récapitulatif). Il ne modifie que des `textContent`.
 - Suspendu si `document.hidden`, recalculé sur `visibilitychange` et `pageshow`.
 - La frise et la jauge sont rafraîchies à la minute.
 
@@ -325,7 +328,7 @@ Si `meta.accueilVu === false`, une carte « Votre journée type » s'affiche à 
 - **Édition** : la plage modifiée est retirée puis réinsérée (elle devient « la plus récente »). Elle garde son `id` et son `o`, et `s` est conservé.
 - **Supprimer** (bouton dans la feuille, ou touche Suppr sur une ligne focalisée en desktop) : suppression immédiate, toast Annuler, focus rendu à la ligne suivante, sinon à « + Plage ».
 - **Reprendre ▶** : démarre le chrono avec le `p` et la `n` de la plage (un chrono actif est d'abord arrêté, avec un seul toast « Chrono basculé · Annuler »).
-- **Saisie rapide** (desktop colonne gauche ou feuille) : `analyserSaisie` (§6.8). Entrée enregistre toutes les plages de l'aperçu en une seule mutation (un seul Annuler). L'aperçu est obligatoire : pas d'enregistrement si l'analyse a une erreur.
+- **Saisie rapide** (si `saisieRapide` ; desktop colonne gauche ou feuille) : `analyserSaisie` (§6.8). Entrée enregistre toutes les plages de l'aperçu en une seule mutation (un seul Annuler). L'aperçu est obligatoire : pas d'enregistrement si l'analyse a une erreur.
 
 ### 4.3 Journée type
 - **Jour vide** : « Journée type · 7 h » applique `reglages.journeeType` (plages `o:'m'`, `s` absent).
@@ -363,7 +366,7 @@ Si `meta.accueilVu === false`, une carte « Votre journée type » s'affiche à 
   - **J** journée type ;
   - **T** aujourd'hui ;
   - **← / →** période ;
-  - **/** saisie rapide ;
+  - **/** saisie rapide (seulement si `saisieRapide` ; sinon inactif et absent de la liste) ;
   - **1 / 2 / 3** Jour / Semaine / Mois.
   (Pas de raccourci Espace.)
 - Tuiles horaires : ↑ / ↓ = ±5 min (Maj : ±15).
@@ -398,6 +401,7 @@ Si `meta.accueilVu === false`, une carte « Votre journée type » s'affiche à 
     { "id": "p_ab12cd34ef", "nom": "…", "t": 3, "a": false }  // nom 1–40, t entier 0–7, a = archivé
   ],
   "reglages": { /* §8, tous présents après normalisation */ },
+  "recup": [ "2026-10-16" ],     // FACULTATIF (absent → []) : jours de récupération (§6.12), clés "AAAA-MM-JJ" uniques, triées, ≤ 1000
   "meta": { "creeLe": "2026-10-14", "derniereSauvegarde": null, "accueilVu": false }
 }
 ```
@@ -424,7 +428,8 @@ Elle s'applique à chaque lecture : chargement, `storage`, `pageshow`, import, e
   - en pause, `tp` dans les mêmes bornes et `t0` vaut null ;
   - `s` est valide.
   Sinon `chrono = null` et le rapport le signale.
-- `reglages` : chaque champ est validé avec sa borne (§8). Une valeur invalide prend le défaut.
+- `reglages` : chaque champ est validé avec sa borne (§8). Une valeur invalide prend le défaut. Une clé inconnue (ex. l'ancien `secondes`) est ignorée sans bruit.
+- `recup` (`validerRecup`) : tableau de clés validées par `RE_JOUR` + date réelle (2000–2100), sans doublon, triées ; au-delà de 1000, les 1000 plus récentes. Absent ou `null` → `[]` (rétrocompatible) ; pas un tableau → `[]` et signalé ; chaque clé invalide est comptée dans `rapport.ignores`. Inclus dans l'export / import JSON ; le CSV est inchangé.
 - Normalisation de chaque jour : `normaliserJour` (§6.5).
 - `rapport = { statut: 'ok' | 'partiel' | 'vide' | 'illisible' | 'futur', ignores: n, details: [libellés courts] }`.
 
@@ -555,6 +560,26 @@ Auto : de `floor((min début − 30) / 60)·60` à `ceil((max fin + 30) / 60)·6
 - Durée vocalisée : « 3 heures 29 minutes ».
 - Dates d'export `jj/mm/aaaa`.
 
+### 6.12 Balance d'heures (`balance(donnees, maintenantMs, vivants?) → {min, jours}`, pure dans taf.js)
+- **Dû d'un jour** (`duJour(reglages, cle|iso)`, règle unique, aussi utilisée pour l'objectif affiché du jour, de la bande semaine et de la ruche) : le **contrat réel** réparti sur les jours ouvrés, en minutes exactes (aucun pas de 15 min) = `objHebdoMin / nombre de joursOuvres` ; si `objHebdoMin` vaut 0, repli sur `dureeJourMin` ; 0 hors `joursOuvres`. Ex. 39 h sur 5 jours → 468 min (7 h 48) par jour ouvré ; 35 h → 420.
+- **Période** : de `reglages.balanceDepuis` (inclus ; `null` = depuis le début) à aujourd'hui inclus. Réglage « Balance depuis le » (section Balance d'heures du tiroir) + bouton « Remettre à zéro aujourd'hui » (`balanceDepuis` = aujourd'hui, une mutation, Annuler). Les jours antérieurs sont ignorés : changer un réglage ne réécrit plus tout l'historique si la balance a été soldée.
+- Jours **saisis** (au moins une plage) : écart = total du jour (`unionMinutes`) − dû (week-end travaillé = heures sup).
+- Jours sans saisie ignorés (un congé ne compte pas en négatif), **sauf un jour de récupération** (`donnees.recup`) : sans plage, il compte **− dû** (il solde des heures sup), y compris aujourd'hui ; avec des plages, il est compté normalement ; un jour non dû (hors jours ouvrés) n'a aucun effet. Menu ⋯ de la vue Jour : « Marquer en récupération » / « Retirer la récupération » (jours ouvrés, ou jour déjà marqué), via `muter` (Annuler). Indicateur texte « Récupération » sur le jour (badge + effet sur la balance), « Réc. » dans la bande semaine et la ruche (libellé complet dans `aria-label`).
+- Jours futurs ignorés ; clés invalides ignorées.
+- **Aujourd'hui** ne compte en négatif qu'une fois terminé : contribution = `max(0, écart)`.
+- `vivants` : segment du chrono en cours découpé par jour (`decouperSegment`), ajouté au total de son jour (union, sans double compte).
+- `min` = somme signée des écarts arrondie à la minute (> 0 heures sup, < 0 à rattraper) ; `jours` = nombre de jours comptés.
+- Aide du tiroir (`#rBalanceAide`, vide dans le HTML) remplie par heures.js avec les valeurs réelles (dû, objectif ÷ jours ouvrés, date de départ).
+
+### 6.13 Journée avec pause (`decouperPause(d, f, pauseMin, debutPause|null, coupure) → {plages, debutPause, erreur}`, pure dans taf.js)
+- `d`, `f`, `debutPause`, `coupure` : minutes ou `'HH:MM'` ; pause 0 → une plage inchangée.
+- Début automatique (`debutPause` null) : centré sur la coupure si la pause y tient strictement dans la plage, sinon centré sur le milieu de la plage ; au multiple de 5 min le plus proche quand il tient, sinon à la minute.
+- La pause est strictement intérieure (chaque morceau garde au moins 1 min) : `pause < durée − 1`.
+- Erreurs : `plage-invalide`, `pause-invalide` (pas un entier ≥ 0), `pause-trop-longue`, `pause-debut-invalide`, `pause-hors-plage`.
+- Exemples : 09:00–17:00 / 60 → 09:00–12:30 + 13:30–17:00 ; / 45 → 09:00–12:40 + 13:25–17:00 ; 14:00–18:00 / 30 → 14:00–15:45 + 16:15–18:00.
+- **Insertion** (`insererAvecPause(plagesJour, nouvelle, morceaux) → {plages, rognees, plafonnees}`, pure dans taf.js) : « la plus récente gagne » (§6.4) est appliquée **une seule fois sur l'enveloppe** `[d, f]` (pause comprise), puis les morceaux sont insérés : **aucune ancienne plage ne subsiste dans la pause** (ex. plage existante 09:00–17:00 ou 10:00–16:00, puis 09:00–17:00 avec 1 h de pause → 420 min). Le 1er morceau garde l'id (édition) et la session, les suivants reçoivent un id neuf. L'aperçu de chevauchement simule l'enveloppe une seule fois, et le toast décrit ce seul rognage.
+- Puces : Aucune / 30 min / 45 min / 1 h / 1 h 30, plus « Pause déj. » + durée = `pauseDejMin` quand elle diffère de ces valeurs (jamais présélectionnée), et « Autre… ».
+
 ## 7. Pont CRA
 
 ### 7.1 Règle partagée (taf.js)
@@ -622,20 +647,20 @@ Seuls les jours ayant au moins une plage y figurent. `activite = TAF.heures.acti
 
 ### 7.5 Pastille « en cours » (taf.js, les deux pages)
 `TAF.nav` lit `chrono` (lecture seule).
-- Sur l'onglet ou lien « Heures » : point plein et « 02:14 » (heures:minutes, mis à jour à la minute, suspendu si la page est cachée).
-- En pause : demi-point et « pause ».
-- `aria-label` du lien : « Heures, chrono en cours depuis 2 heures 14 ».
+- Sur l'onglet ou lien « Heures » : **un point seul**, sans durée (comme la Pointeuse, pas de compteur qui défile) : plein en marche, demi-point en pause.
+- Aucun rafraîchissement à la minute.
+- `aria-label` du lien : « Heures, chrono en cours » / « Heures, chrono en pause ».
 - Mise à jour sur `storage`.
 
 ## 8. Paramètres (`reglages`, tiroir Réglages de heures.html)
 
 | Champ | Défaut | Bornes / valeurs | Section | Usage |
 |---|---|---|---|---|
-| `objHebdoMin` | 2100 (35 h) | 0–4800, pas de 15 ; 0 masque la jauge | Journée et semaine | jauge, reste |
-| `dureeJourMin` | 420 (7 h) | 60–840, pas de 15 | Journée et semaine | jauge du jour, niveau d'alvéole, ½ journée, seuil auto |
+| `objHebdoMin` | 2100 (35 h) | 0–4800, pas de 15 ; 0 masque la jauge | Journée et semaine | jauge, reste ; **dû de la balance** = objHebdoMin / jours ouvrés (§6.12) |
+| `dureeJourMin` | 420 (7 h) | 60–840, pas de 15 | Journée et semaine | ½ journée, seuil auto ; objectif du jour et dû de la balance seulement si objHebdoMin = 0 (repli) |
 | `joursOuvres` | [1,2,3,4,5] | ISO 1–7, uniques, triés, éventuellement vide | Journée et semaine | « vide », remplir, pointillés |
 | `debutHabituel` | "09:00" | HH:MM | Journée et semaine | préremplissage |
-| `pauseDejMin` | 60 | 0–180 | Journée et semaine | journée type proposée |
+| `pauseDejMin` | 60 | 0–180 | Journée et semaine | journée type proposée ; puce « Pause déj. » de la feuille Plage (§6.13) |
 | `coupure` | "13:00" | HH:MM entre 06:00 et 18:00 | Conversion CRA | demi-journées, frises |
 | `seuilDemiMin` | null (auto = dureeJour/4 arrondi à 5 → 105) | null ou 15 – dureeJour/2 | Conversion CRA | demi-journées |
 | `rattrapage` | true | bool | Conversion CRA | demi-journée dominante |
@@ -643,12 +668,15 @@ Seuls les jours ayant au moins une plage y figurent. `activite = TAF.heures.acti
 | `modeArrondi` | "proche" | "proche" / "favorable" | Chrono | §6.3 |
 | `alerteOubliMin` | 600 | 120–1440 | Chrono | bannière |
 | `projetDemarrage` | "dernier" | "dernier" / "aucun" | Chrono | Démarrer |
-| `secondes` | true | bool | Chrono | affichage |
 | `vibration` | true | bool (coupée si reduced-motion) | Chrono | retour tactile |
 | `autoPointer` | false | bool | Chrono | `#pointer` |
 | `journeeType` | null | null ou 0–8 `{d,f,p}` valides, sans chevauchement | Journée type | boutons Journée type |
 | `raccourcis` | true | bool | Raccourcis | §4.7 |
+| `saisieRapide` | false | bool (absent → false) | Saisie rapide (« Afficher la saisie rapide », effet immédiat) | champ de la colonne gauche, bloc de la feuille Plage, raccourci `/` et ses aides |
 | `rappelSauvegardeJours` | 30 | 0 (désactivé), 7, 30 | Mes données | bannière |
+| `balanceDepuis` | null | null ou "AAAA-MM-JJ" (regex + date réelle, 2000–2100) ; absent → null | Balance d'heures (« Balance depuis le », « Remettre à zéro aujourd'hui ») | début de la balance (§6.12) |
+
+- L'ancien réglage `secondes` (plus rien ne s'affiche à la seconde) est retiré : ignoré sans bruit à la lecture.
 
 - La section **Conversion CRA** contient un exemple vivant, calculé avec `demiJournees` sur la journée type et sur 3 cas fixes (« 09:00–12:30 + 13:30–17:00 → 1 j », « 14:00–16:00 → ½ j après-midi », « 12:00–14:00 → ½ j matin »).
 - La section **Mes données Heures** contient :
@@ -707,7 +735,7 @@ Seuls les jours ayant au moins une plage y figurent. `activite = TAF.heures.acti
 - Un `h1` par vue, des `h2` par carte. Lien d'évitement « Aller au chrono ».
 
 **Chrono**
-- `role="timer"` et `aria-live="off"` sur les chiffres : **aucune annonce par seconde**.
+- Plus de `role="timer"` : la balance porte un texte visuel `aria-hidden` doublé d'une phrase complète en `sr-only` (« Balance d'heures : 2 heures 30 minutes d'heures supplémentaires » / « … à rattraper » / « … à jour ») ; **aucune annonce** à chaque minute.
 - Une description textuelle (`#etatChrono`, « Chrono en marche depuis 9 h 02, projet Client A ») est mise à jour **uniquement aux changements d'état** et annoncée une fois via `TAF.annoncer`.
 - `aria-label` dynamique de l'hexagone : « Démarrer le chrono », « Mettre en pause », « Reprendre ».
 - La forme et le texte visible doublent toujours la couleur.
@@ -766,7 +794,7 @@ Seuls les jours ayant au moins une plage y figurent. `activite = TAF.heures.acti
 **Chrono**
 - **Démarrer** : l'hexagone fait `scale(.94)` puis `1` (180 ms), la couche pleine apparaît en fondu et ▶ / ❚❚ passent en fondu croisé. Pendant la marche, un **halo** (pseudo-élément, `scale 1 → 1.08`, `opacity .35 → 0`, boucle de 2,4 s) tourne ; c'est la seule animation continue, coupée si l'onglet est caché.
 - **Pause** : la moitié droite s'efface (opacity), ce qui donne la forme demi-pleine ; le halo s'arrête ; le libellé « En pause depuis » glisse de `translateY(6px)` à 0.
-- **Chiffres** : les secondes changent sans animation ; au changement de minute, le groupe des minutes glisse de `translateY(-30%)` à 0 avec un fondu (160 ms).
+- **Balance** : quand la valeur change, elle glisse de `translateY(-18%)` à 0 avec un fondu (180 ms) ; rien ne bouge à la seconde.
 
 **Listes et frises**
 - **Ajout de plage** : la ligne entre en `scale(.96)` vers 1 avec un fondu (200 ms) ; les voisines glissent par **FLIP** (`translateY`).
@@ -837,6 +865,11 @@ Liste de référence :
 - TAF.heures.seuilDemi(reglages) -> minutes effectives du seuil (null => arrondi à 5 de dureeJourMin/4).
 - TAF.heures.activiteJour(plagesJour, projets, max=200) -> chaîne « Projet A · Projet B · note » dédoublonnée et tronquée avec '…'.
 - TAF.heures.resumeMois(donnees, annee, mois0) -> {[jour]: {min, minAm, minPm, am, pm, activite}} : seulement les jours avec plages.
+- TAF.heures.balance(donnees, maintenantMs, vivants?) -> {min, jours} : balance d'heures sup / à rattraper (§6.12).
+- TAF.heures.decouperPause(d, f, pauseMin, debutPause|null, coupure) -> {plages:[{d,f}], debutPause, erreur:null|{code,message}} : journée avec pause (§6.13).
+- TAF.heures.insererAvecPause(plagesJour, nouvelle, morceaux) -> {plages, rognees, plafonnees} : insertion d'une journée avec pause, rognage sur l'enveloppe (§6.13).
+- TAF.heures.duJour(reglages, cle|iso) -> minutes dues ce jour (§6.12).
+- TAF.heures.validerRecup(brut) -> {liste, ignores} : jours de récupération (§5.2).
 - TAF.heures.planifierImport(craDays, resume, mode:'completer'|'remplacer', avecActivite) -> {changements:[{jour, avant, apres}], synthese:{joursDetectes, joursProposes, inchanges, ajoutes, decoches}} : plan pur de l'import CRA.
 - TAF.heures.RE_HASH_CRA : /^#heures-(\d{4})-(0[1-9]|1[0-2])$/ (partagée par le lien « Ouvrir dans le CRA » et le parseur côté CRA).
 - TAF.dates.cle(date) -> 'AAAA-MM-JJ' local ; TAF.dates.depuisCle(cle) -> Date locale à midi ou null ; TAF.dates.cleValide(cle) -> bool (regex + date réelle + années 2000–2100).
@@ -883,8 +916,8 @@ Liste de référence :
 8. Chrono oublié : bannière au-delà du seuil ou si minuit a été franchi, trois choix, aperçu de découpe, découpe à minuit correcte ; horloge reculée = 0 avec avertissement.
 9. Arrondi du chrono (1 / 5 / 10 / 15, proche / favorable) appliqué seulement au chrono et à « Maintenant », jamais aux heures tapées ; segment de moins d'une minute ignoré avec toast.
 10. Vue Jour : en-tête ‹ › et glissement, bande semaine (aria-current=date), jauge du jour et ligne CRA, frise (coupure M | A, ligne maintenant, clic dans une zone vide = nouvelle plage préremplie), liste accessible, ligne « En cours » dérivée.
-11. Feuille Plage : préremplissage (§6.10), tuiles ±5 / ±15 et input time, durées rapides, case « jusqu'à minuit » et « se termine le lendemain », aperçu de chevauchement avant enregistrement et toast qui nomme la plage rognée.
-12. Saisie rapide : formats d'heure et de durée, @projet (exact puis préfixe unique, erreur si ambigu ou inconnu), note, heuristique +12 h unique, traverse minuit, aperçu obligatoire, une seule mutation annulable.
+11. Feuille Plage : préremplissage (§6.10), tuiles ±5 / ±15 et input time, durées rapides, case « jusqu'à minuit » et « se termine le lendemain », aperçu de chevauchement avant enregistrement et toast qui nomme la plage rognée ; pause (puces, saisie libre, début prérempli) → deux plages en une seule mutation, pause désactivée si la plage se termine le lendemain.
+12. Saisie rapide (masquée par défaut, réglage « Afficher la saisie rapide » à effet immédiat, raccourci `/` inactif quand elle est masquée) : formats d'heure et de durée, @projet (exact puis préfixe unique, erreur si ambigu ou inconnu), note, heuristique +12 h unique, traverse minuit, aperçu obligatoire, une seule mutation annulable.
 13. Édition, suppression et Reprendre ▶ d'une plage ; focus restitué ; Suppr au clavier sur une ligne (desktop).
 14. Journée type : appliquer sur un jour vide, Compléter (n'ajoute que les plages sans chevauchement), Enregistrer ce jour comme journée type (confirmation intégrée si elle remplace), boutons « Définir ma journée type » si elle est absente.
 15. Vue Semaine : numéro ISO, jauge hexagonale (objectif, débordement + texte), tuiles, frise de 7 rangées cliquables, week-end vide replié, « Remplir N jours ouvrés vides » (jours ≤ aujourd'hui seulement, une mutation, un Annuler).
@@ -900,7 +933,7 @@ Liste de référence :
 25. Pont CRA : bouton « Depuis mes heures » visible seulement si le mois a des heures (badge = nombre de jours), aperçu avant / après, Compléter ne décoche jamais et ne remplace pas une activité non vide, Remplacer avec confirmation, activité optionnelle, Annuler (10 s), annonce dans #calLiveRegion, total et PDF recalculés.
 26. Fragment #heures-AAAA-MM : regex stricte, ouvre la pop-up et le dialogue sans rien appliquer, propose le changement de mois via changerPeriode (archive), hash nettoyé ; le CRA n'écrit jamais taf_heures_v1 et Heures n'écrit jamais cra_app_v3.
 27. Mêmes nombres partout : la vue Mois, la ligne CRA du jour, la synthèse CSV et l'import CRA donnent un équivalent en jours identique (TAF.heures.demiJournees).
-28. Accessibilité : landmarks, lien d'évitement, role=timer aria-live=off (aucune annonce par seconde), annonces aux changements d'état seulement, dialogues avec focus piégé et restitué, Échap ferme la surface du dessus, alternatives à chaque geste, focus visible, contraste AA avec trois accents différents.
+28. Accessibilité : landmarks, lien d'évitement, balance avec phrase complète pour les lecteurs d'écran (aucune annonce à la minute), annonces aux changements d'état seulement, dialogues avec focus piégé et restitué, Échap ferme la surface du dessus, alternatives à chaque geste, focus visible, contraste AA avec trois accents différents.
 29. Responsive : matrice complète de CLAUDE.md §4 (320×568 → 1920×1080, paysages, tablettes) avec vues fermées, feuille Plage, feuille Chrono, tiroir, Export et import CRA ouverts : scrollWidth ≤ innerWidth, cibles ≥ 44 px, dock / pilule / carte selon le palier, rien de masqué derrière le dock ou la barre d'onglets ; zoom 200 % et reflow à 320 px.
 30. Animations : uniquement transform / opacity, pas de CLS, halo seulement en marche et onglet visible, tout est coupé avec prefers-reduced-motion (vibration comprise), view-transitions en amélioration progressive sans erreur sur un navigateur non compatible.
 31. file:// sous Chrome : heures.html fonctionne (scripts classiques defer, pas de module ES) ; tests/index.html tout au vert sans toucher les vraies clés localStorage.
@@ -972,6 +1005,13 @@ Liste de référence :
 
 **Identifiants**
 42. `TAF.id('h')` correspond à `^h_[a-z0-9]{10}$`, et 1000 tirages ne produisent aucun doublon.
+
+**Balance, pause, réglage saisieRapide** (2026-10-14 est un mercredi)
+43. `balance` : lundi 7 h (0) + mardi 8 h (+1 h) → `{min:60, jours:2}` ; jeudi passé 3 h → −4 h ; jour vide ou sans saisie ignoré ; samedi 2 h → +2 h ; `dureeJourMin` 480 et `joursOuvres` paramétrables.
+44. `balance`, jour courant : 3 h à 18:00 → 0 (pas −4 h), 9 h → +2 h, le lendemain → −4 h ; segment vivant compté (union, sans double compte, y compris un jour sans plage stockée) ; jours futurs et clés invalides (`2026-02-30`, `__proto__`) ignorés.
+45. `decouperPause` : 09:00–17:00 / 60 → 09:00–12:30 + 13:30–17:00 (`debutPause` 750) ; / 45 → 09:00–12:40 + 13:25–17:00 ; coupure 12:00 → pause 11:30–12:30 ; coupure hors plage ou sans la place → milieu (14:00–18:00 / 30, 12:00–13:30 / 60, 20:00–24:00 / 30) ; début fourni ('12:00' ou 600) ; pause 0 → une plage.
+46. `decouperPause`, erreurs : 479 et 480 min sur 8 h → `pause-trop-longue` (478 → 1 min de chaque côté) ; début 16:30, 09:00 ou 08:00 → `pause-hors-plage` ; −5, 1,5 ou '60' → `pause-invalide` ; plage inversée ou illisible → `plage-invalide` ; début '25:00' → `pause-debut-invalide`.
+47. `saisieRapide` : défaut `false`, absent → `false`, valeur non booléenne ignorée (statut `partiel`) ; `reglagesDefaut` compte 19 clés.
 
 **Tests Playwright (http://127.0.0.1)**
 - Matrice complète de CLAUDE.md §4, avec la vue Jour, la vue Semaine, la vue Mois, la feuille Plage ouverte, la feuille Chrono ouverte, le tiroir ouvert, le dialogue Export ouvert et le dialogue d'import dans le CRA ouvert. À chaque fois : `scrollWidth ≤ innerWidth`, cibles ≥ 44 px, aucun rognage.

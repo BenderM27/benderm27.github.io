@@ -247,7 +247,168 @@
     egal(r.donnees.rev, 7);
     egal(r.donnees.jours['2026-10-13'][0].id, 'h_doublon001', 'premier conservé');
     vrai(/^h_[a-z0-9]{10}$/.test(r.donnees.jours['2026-10-14'][0].id) && r.donnees.jours['2026-10-14'][0].id!=='h_doublon001', 'id dupliqué régénéré');
-    egal(Object.keys(H.reglagesDefaut()).length, 18);
+    egal(Object.keys(H.reglagesDefaut()).length, 19);
+  });
+  test('saisieRapide — défaut false, rétrocompatible (absent → false), booléen validé', function(){
+    egal(H.reglagesDefaut().saisieRapide, false);
+    egal(H.validerReglages({}).saisieRapide, false, 'anciennes données sans le champ');
+    egal(H.validerReglages({ saisieRapide:true }).saisieRapide, true);
+    var r=v({ v:1, reglages:{ saisieRapide:'oui' } });
+    egal([ r.donnees.reglages.saisieRapide, r.rapport.statut ], [ false, 'partiel' ], 'valeur non booléenne ignorée');
+  });
+
+  /* ---------- Balance d'heures (§6.12) — 2026-10-14 est un mercredi ---------- */
+  var SOIR=new Date(2026, 9, 14, 18, 0).getTime();
+  function bal(jours, reglages, vivants, now){ return H.balance({ jours:jours, reglages:reglages||{} }, now||SOIR, vivants); }
+  var J_7H=[ { d:'09:00', f:'12:30' }, { d:'13:30', f:'17:00' } ];
+  test('balance — jours saisis comptés, jours sans saisie ignorés (congé ≠ négatif)', function(){
+    egal(bal({ '2026-10-12':J_7H, '2026-10-13':[ { d:'09:00', f:'17:00' } ] }), { min:60, jours:2 }, 'lundi 7 h (0) + mardi 8 h (+1 h)');
+    egal(bal({ '2026-10-08':[ { d:'09:00', f:'12:00' } ] }), { min:-240, jours:1 }, 'jeudi passé 3 h : −4 h');
+    egal(bal({}), { min:0, jours:0 }, 'aucune saisie : à jour');
+    egal(bal({ '2026-10-09':[] }), { min:0, jours:0 }, 'jour vide ignoré');
+    egal(H.balance(null, SOIR), { min:0, jours:0 });
+  });
+  test('balance — week-end travaillé = heures sup ; durée et jours ouvrés paramétrables', function(){
+    egal(bal({ '2026-10-10':[ { d:'10:00', f:'12:00' } ] }), { min:120, jours:1 }, 'samedi');
+    egal(bal({ '2026-10-09':J_7H }, { objHebdoMin:0, dureeJourMin:480 }), { min:-60, jours:1 }, 'sans objectif hebdo : repli sur la journée de 8 h');
+    egal(bal({ '2026-10-09':J_7H }, { dureeJourMin:480 }), { min:0, jours:1 }, 'objectif 35 h / 5 j prioritaire sur la durée d’une journée');
+    egal(bal({ '2026-10-09':J_7H }, { joursOuvres:[1,2,3,4] }), { min:420, jours:1 }, 'vendredi non ouvré');
+  });
+  test('balance — jour courant : négatif ignoré tant qu’il n’est pas fini, positif compté', function(){
+    egal(bal({ '2026-10-14':[ { d:'09:00', f:'12:00' } ] }), { min:0, jours:1 }, '3 h aujourd’hui : 0, pas −4 h');
+    egal(bal({ '2026-10-14':[ { d:'09:00', f:'18:00' } ] }), { min:120, jours:1 }, '9 h aujourd’hui : +2 h');
+    egal(bal({ '2026-10-14':[ { d:'09:00', f:'12:00' } ] }, null, null, new Date(2026, 9, 15, 8, 0).getTime()), { min:-240, jours:1 }, 'le lendemain : −4 h');
+  });
+  test('balance — segment du chrono en cours compté (union, sans double compte)', function(){
+    egal(bal({ '2026-10-14':[ { d:'09:00', f:'12:00' } ] }, null, { '2026-10-14':[ { d:'13:00', f:'18:00' } ] }), { min:60, jours:1 });
+    egal(bal({ '2026-10-14':[ { d:'09:00', f:'12:00' } ] }, null, { '2026-10-14':[ { d:'11:00', f:'18:00' } ] }), { min:120, jours:1 }, 'chevauchement compté une fois');
+    egal(bal({}, null, { '2026-10-14':[ { d:'08:00', f:'18:00' } ] }), { min:180, jours:1 }, 'jour sans plage stockée');
+  });
+  test('duJour — contrat réel / jours ouvrés (minutes exactes), repli, 0 hors jours ouvrés', function(){
+    egal([ H.duJour({}, '2026-10-14'), H.duJour({}, '2026-10-10'), H.duJour({}, 6), H.duJour({}, '2026-02-30') ], [ 420, 0, 0, 0 ]);
+    egal(H.duJour({ objHebdoMin:2340 }, '2026-10-12'), 468, '39 h sur 5 jours : 7 h 48');
+    egal(H.duJour({ objHebdoMin:0, dureeJourMin:480 }, 3), 480, 'objectif 0 : durée d’une journée');
+    egal(H.duJour({ objHebdoMin:2115, joursOuvres:[1,2,3,4] }, 1), 528.75, 'aucun pas de 15 min imposé');
+  });
+  var J_748=[ { d:'09:00', f:'12:30' }, { d:'13:30', f:'17:48' } ];
+  test('balance — contrat de 39 h sur 5 jours : semaine faite = à jour (plus de dérive)', function(){
+    var sem={ '2026-10-05':J_748, '2026-10-06':J_748, '2026-10-07':J_748, '2026-10-08':J_748, '2026-10-09':J_748 };
+    egal(bal(sem, { objHebdoMin:2340 }), { min:0, jours:5 });
+    egal(bal(sem), { min:240, jours:5 }, 'contrat 35 h : + 48 min par jour');
+    egal(bal({ '2026-10-09':[ { d:'09:00', f:'17:00' } ] }, { objHebdoMin:2340 }), { min:12, jours:1 });
+  });
+  test('balance — date de départ (balanceDepuis) : jours antérieurs ignorés, jour inclus', function(){
+    var j={ '2026-10-08':[ { d:'09:00', f:'12:00' } ], '2026-10-13':[ { d:'09:00', f:'17:00' } ] };
+    egal(bal(j), { min:-180, jours:2 });
+    egal(bal(j, { balanceDepuis:'2026-10-13' }), { min:60, jours:1 });
+    egal(bal(j, { balanceDepuis:'2026-10-14' }), { min:0, jours:0 }, 'remise à zéro aujourd’hui');
+    egal(bal(j, { balanceDepuis:'2026-02-30' }), { min:-180, jours:2 }, 'date invalide : ignorée (depuis le début)');
+  });
+  test('balanceDepuis — défaut null, AAAA-MM-JJ validée (regex + date réelle), rétrocompatible', function(){
+    egal(H.reglagesDefaut().balanceDepuis, null);
+    egal([ H.validerReglages({}).balanceDepuis, H.validerReglages({ balanceDepuis:'2026-10-13' }).balanceDepuis ], [ null, '2026-10-13' ]);
+    egal([ '2026-02-30', '2026-13-01', '26-10-13', '__proto__', 20261013, '2026-10-13T00:00' ].map(function(x){ return H.validerReglages({ balanceDepuis:x }).balanceDepuis; }), [ null, null, null, null, null, null ]);
+    egal(v({ v:1, reglages:{ balanceDepuis:'2026-02-30' } }).rapport.statut, 'partiel');
+    egal(H.validerReglages({ secondes:false }).secondes, undefined, 'ancien réglage « secondes » : ignoré sans bruit');
+    egal(v({ v:1, reglages:{ secondes:true } }).rapport.statut, 'ok');
+  });
+  function balR(jours, recup, reglages, now){ return H.balance({ jours:jours, recup:recup, reglages:reglages||{} }, now||SOIR); }
+  test('balance — jour de récupération sans plage : − dû (solde les heures sup)', function(){
+    var j={ '2026-10-12':[ { d:'09:00', f:'20:00' } ] };
+    egal(balR(j, []), { min:240, jours:1 });
+    egal(balR(j, [ '2026-10-13' ]), { min:-180, jours:2 }, 'lundi + 4 h, mardi récupéré − 7 h');
+    egal(balR(j, [ '2026-10-12' ]), { min:240, jours:1 }, 'récupération avec plages : comptée normalement');
+    egal(balR({}, [ '2026-10-14' ]), { min:-420, jours:1 }, 'aujourd’hui en récupération : compté tout de suite');
+    egal(balR({ '2026-10-14':[ { d:'08:00', f:'08:30' } ] }, [ '2026-10-14' ]), { min:-390, jours:1 }, 'aujourd’hui en récupération AVEC une courte plage : compté normalement, tout de suite (pas de max(0, …))');
+    egal(H.balance({ jours:{}, recup:[ '2026-10-14' ], reglages:{} }, SOIR, { '2026-10-14':[ { d:'08:00', f:'09:00' } ] }), { min:-360, jours:1 }, 'idem avec le segment du chrono en cours');
+    egal(balR({}, [ '2026-10-16', '2026-10-10' ]), { min:0, jours:0 }, 'futur et week-end : sans effet');
+    egal(balR({}, [ '2026-10-13' ], { objHebdoMin:2340 }), { min:-468, jours:1 }, 'contrat 39 h');
+    egal(balR({}, [ '2026-10-08', '2026-10-13' ], { balanceDepuis:'2026-10-13' }), { min:-420, jours:1 }, 'avant la date de départ : ignoré');
+    egal(H.balance({ jours:{}, reglages:{} }, SOIR), { min:0, jours:0 }, 'recup absent (anciennes données)');
+  });
+  test('validerRecup — clés AAAA-MM-JJ réelles, sans doublon, triées, bornées à 1000', function(){
+    egal(H.validerRecup([ '2026-10-13', '2026-10-13', '2026-02-30', '__proto__', 5, '2026-10-01' ]), { liste:[ '2026-10-01', '2026-10-13' ], ignores:3 });
+    egal([ H.validerRecup(undefined), H.validerRecup(null), H.validerRecup('2026-10-13'), H.validerRecup({ 0:'2026-10-13' }) ],
+      [ { liste:[], ignores:0 }, { liste:[], ignores:0 }, { liste:[], ignores:1 }, { liste:[], ignores:1 } ]);
+    var l=[], k='2020-01-01';
+    for(var i=0;i<1005;i++){ l.push(k); k=D.ajouterJours(k, 1); }
+    var r=H.validerRecup(l.slice().reverse());
+    egal([ r.liste.length, r.ignores, r.liste[0], r.liste[999] ], [ 1000, 5, l[5], l[1004] ], 'les 1000 plus récentes');
+    egal(H.LIMITES.recup, 1000);
+  });
+  test('valider — recup : rétrocompatible (absent → []), filtré, rapport partiel', function(){
+    egal([ v({ v:1 }).donnees.recup, v({ v:1 }).rapport.statut ], [ [], 'ok' ]);
+    var r=v({ v:1, recup:[ '2026-10-13', 'x', '2026-10-12' ] });
+    egal([ r.donnees.recup, r.rapport.statut ], [ [ '2026-10-12', '2026-10-13' ], 'partiel' ]);
+    egal(v({ v:1, recup:'oui' }).donnees.recup, []);
+  });
+  test('balance — jours futurs ignorés, clés invalides ignorées', function(){
+    egal(bal({ '2026-10-15':[ { d:'09:00', f:'17:00' } ], '2026-10-20':J_7H }), { min:0, jours:0 });
+    egal(bal(JSON.parse('{"2026-02-30":[{"d":"09:00","f":"17:00"}],"__proto__":[{"d":"09:00","f":"17:00"}]}')), { min:0, jours:0 });
+  });
+
+  /* ---------- Journée avec pause (§6.13) ---------- */
+  function pz(r){ return r.erreur?r.erreur.code:dfs(r.plages); }
+  test('decouperPause — 09:00 → 17:00 avec 1 h : centrée sur la coupure (13:00)', function(){
+    var r=H.decouperPause('09:00', '17:00', 60, null, '13:00');
+    egal(pz(r), [ '09:00–12:30', '13:30–17:00' ]);
+    egal([ r.debutPause, r.erreur ], [ 750, null ]);
+    egal(pz(H.decouperPause(540, 1020, 45, null, '13:00')), [ '09:00–12:40', '13:25–17:00' ], '45 min : multiple de 5 au plus près');
+    egal(pz(H.decouperPause(540, 1020, 60, null, '12:00')), [ '09:00–11:30', '12:30–17:00' ], 'coupure paramétrée');
+  });
+  test('decouperPause — coupure hors plage (ou sans la place) : milieu de la plage', function(){
+    egal(pz(H.decouperPause('14:00', '18:00', 30, null, '13:00')), [ '14:00–15:45', '16:15–18:00' ]);
+    egal(pz(H.decouperPause('12:00', '13:30', 60, null, '13:00')), [ '12:00–12:15', '13:15–13:30' ], 'pause de 1 h sur 13:00 déborderait');
+    egal(pz(H.decouperPause('20:00', '24:00', 30, null, '13:00')), [ '20:00–21:45', '22:15–24:00' ], 'jusqu’à minuit');
+  });
+  test('decouperPause — début fourni, sans pause', function(){
+    egal(pz(H.decouperPause('09:00', '17:00', 60, '12:00', '13:00')), [ '09:00–12:00', '13:00–17:00' ]);
+    egal(pz(H.decouperPause('09:00', '17:00', 60, 600, '13:00')), [ '09:00–10:00', '11:00–17:00' ], 'en minutes');
+    var r=H.decouperPause('09:00', '17:00', 0, null, '13:00');
+    egal([ pz(r), r.debutPause ], [ [ '09:00–17:00' ], null ]);
+  });
+  test('decouperPause — erreurs (durée, hors plage, invalide)', function(){
+    egal([ pz(H.decouperPause('09:00', '17:00', 479, null)), pz(H.decouperPause('09:00', '17:00', 480, null)) ], [ 'pause-trop-longue', 'pause-trop-longue' ]);
+    egal(pz(H.decouperPause('09:00', '17:00', 478, null, '13:00')), [ '09:00–09:01', '16:59–17:00' ],'limite : 1 min de chaque côté');
+    egal([ pz(H.decouperPause('09:00', '17:00', 60, '16:30')), pz(H.decouperPause('09:00', '17:00', 60, '09:00')), pz(H.decouperPause('09:00', '17:00', 60, '08:00')) ], [ 'pause-hors-plage', 'pause-hors-plage', 'pause-hors-plage' ]);
+    egal([ pz(H.decouperPause('09:00', '17:00', -5, null)), pz(H.decouperPause('09:00', '17:00', 1.5, null)), pz(H.decouperPause('09:00', '17:00', '60', null)) ], [ 'pause-invalide', 'pause-invalide', 'pause-invalide' ]);
+    egal([ pz(H.decouperPause('17:00', '09:00', 60, null)), pz(H.decouperPause('x', '17:00', 60, null)), pz(H.decouperPause('09:00', '17:00', 60, '25:00')) ], [ 'plage-invalide', 'plage-invalide', 'pause-debut-invalide' ]);
+  });
+  /* insererAvecPause : « la plus récente gagne » sur l'enveloppe, puis les deux morceaux. */
+  function morceaux(d, f, p){ return H.decouperPause(d, f, p, null, '13:00').plages; }
+  function dansPause(plages, a, b){ return plages.some(function(x){ return H.minutes(x.d)<H.minutes(b) && H.minutes(x.f)>H.minutes(a); }); }
+  test('insererAvecPause — plage existante 09:00–17:00 puis 09:00–17:00 avec 1 h de pause : 7 h', function(){
+    var r=H.insererAvecPause([ { id:'h_exist00001', d:'09:00', f:'17:00' } ], { id:'h_nouveau001', d:'09:00', f:'17:00' }, morceaux('09:00', '17:00', 60));
+    egal(dfs(r.plages), [ '09:00–12:30', '13:30–17:00' ]);
+    egal(H.unionMinutes(r.plages), 420);
+    egal(r.rognees.map(function(g){ return g.type; }), [ 'supprimee' ], 'une seule description (enveloppe)');
+    egal(r.plages[0].id, 'h_nouveau001');
+    vrai(/^h_[a-z0-9]{10}$/.test(r.plages[1].id) && r.plages[1].id!=='h_nouveau001', 'id neuf pour le 2e morceau');
+  });
+  test('insererAvecPause — existant 10:00–16:00 : 7 h, rien dans la pause ; 08:00–18:00 : scindée', function(){
+    var r=H.insererAvecPause([ { id:'h_exist00001', d:'10:00', f:'16:00' } ], { d:'09:00', f:'17:00' }, morceaux('09:00', '17:00', 60));
+    egal([ H.unionMinutes(r.plages), dansPause(r.plages, '12:30', '13:30') ], [ 420, false ]);
+    var s=H.insererAvecPause([ { id:'h_exist00001', d:'08:00', f:'18:00' } ], { d:'09:00', f:'17:00' }, morceaux('09:00', '17:00', 60));
+    egal(dfs(s.plages), [ '08:00–09:00', '09:00–12:30', '13:30–17:00', '17:00–18:00' ]);
+    egal([ H.unionMinutes(s.plages), s.rognees.length, s.rognees[0].type ], [ 540, 1, 'scindee' ]);
+  });
+  test('insererAvecPause — un morceau hors enveloppe : repli sur insererPlage (contrat documenté)', function(){
+    var ex=[ { id:'h_exist00001', d:'09:00', f:'17:00' } ], n={ id:'h_nouveau001', d:'09:00', f:'17:00' };
+    var r=H.insererAvecPause(ex, n, [ { d:'09:00', f:'12:30' }, { d:'13:30', f:'18:00' } ]);
+    egal(dfs(r.plages), dfs(H.insererPlage(ex, n).plages), 'identique à une insertion simple');
+    egal(H.unionMinutes(r.plages), 480, 'aucune partie de l’enveloppe perdue');
+  });
+  test('insererAvecPause — édition d’une plage existante (id et session gardés par le 1er morceau)', function(){
+    var jour=[ { id:'h_a000000001', d:'09:00', f:'17:00', s:'s_sessiona01' }, { id:'h_b000000001', d:'17:00', f:'18:00' } ];
+    var r=H.insererAvecPause(jour, { id:'h_a000000001', d:'09:00', f:'17:00', s:'s_sessiona01' }, morceaux('09:00', '17:00', 60));
+    egal(dfs(r.plages), [ '09:00–12:30', '13:30–17:00', '17:00–18:00' ]);
+    egal([ H.unionMinutes(r.plages), r.rognees.length, r.plages[0].id, r.plages[0].s, r.plages[1].s, r.plages[2].id ], [ 480, 0, 'h_a000000001', 's_sessiona01', undefined, 'h_b000000001' ]);
+    vrai(r.plages[1].id!=='h_a000000001', '2e morceau : id neuf');
+  });
+  test('insererAvecPause — sans morceaux (ou hors enveloppe) : identique à insererPlage', function(){
+    var base=[ { id:'h_exist00001', d:'09:00', f:'12:00' } ], n={ id:'h_nouveau001', d:'11:00', f:'13:00' };
+    egal(dfs(H.insererAvecPause(base, n, []).plages), dfs(H.insererPlage(base, n).plages));
+    egal(dfs(H.insererAvecPause(base, n, [ { d:'08:00', f:'09:00' } ]).plages), [ '09:00–11:00', '11:00–13:00' ]);
   });
   test('lire — lecture seule validée (stockage simulé), jamais d’écriture', function(){
     var mem=TAF.creerMemoire(), st=TAF.creerStockage(mem);
