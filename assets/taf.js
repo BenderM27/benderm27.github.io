@@ -9,7 +9,7 @@
 
    Initialisation automatique UNIQUEMENT sur une page de module
    (<body data-module="…">) : migration/lecture de l'apparence, section
-   « Apparence » du tiroir, navigation (+ pastille « en cours »), tiroir.
+   « Apparence » du tiroir, navigation, tiroir.
    La page de tests (sans data-module) n'initialise rien et ne touche
    jamais au localStorage réel.
 
@@ -137,24 +137,21 @@
      heures.arrondir(min, pas, 'proche'|'bas'|'haut')
      heures.unionMinutes(plages)   heures.normaliserJour(plages)
      heures.insererPlage(plagesJour, nouvelle) → {plages, rognees}
-     heures.decouperSegment(debut, fin, pas, mode) → {plagesParJour, horlogeReculee, erreur?}
      heures.analyserSaisie(texte, ctx) → {plagesParJour, plages, projet, note, erreurs, traverseMinuit}
      heures.demiJournees(plages, reglages) → {am, pm, minAm, minPm}
      heures.seuilDemi(reglages)  heures.activiteJour(plages, projets, max?)
      heures.resumeMois(donnees, annee, mois0)
-     heures.balance(donnees, maintenant, vivants?) → {min, jours}  heures sup (+) / à rattraper (−)
-     heures.duJour(reglages, cle|iso) → minutes dues ce jour   heures.validerRecup(brut) → {liste, ignores}
+     heures.balance(donnees, maintenant) → {min, jours}  heures sup (+) / à rattraper (−)
+     heures.duJour(reglages, cle|iso) → minutes dues ce jour (durée d'une journée si ouvré, sinon 0)
+     heures.validerRecup(brut) → {liste, ignores}
      heures.insererAvecPause(plagesJour, nouvelle, morceaux) → {plages, rognees, plafonnees}
      heures.decouperPause(d, f, pauseMin, debutPause|null, coupure) → {plages, debutPause, erreur}
      heures.planifierImport(craDays, resume, mode, avecActivite) → {changements, synthese}
      heures.lireHashCra(hash) → {annee, mois0} | null   heures.hashCra(annee, mois0)
-     heures.validerChrono(c, projets?, maintenant?) → chrono | null
 
    Navigation & impression
      moduleActif() → id du module de la page (body[data-module])
-     nav.init()  nav.rafraichir()  nav.etatPastille(chrono, maintenant) (pure)
-                                 pastille « en cours » de l'onglet Heures, lue en
-                                 LECTURE SEULE dans taf_heures_v1 (minute + storage)
+     nav.init()                  aria-current + retour en haut sur l'onglet actif
      definirNomImpression(fn)    preparerImpression()  (idempotent : titre = nom
                                  du PDF jusqu'à afterprint ou la prochaine interaction)
 ============================================================================ */
@@ -176,7 +173,6 @@
   var JOURS_LONGS=Object.freeze(['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi']);
   var JOURS_COURTS=Object.freeze(['Dim.','Lun.','Mar.','Mer.','Jeu.','Ven.','Sam.']);
   var ORDRE_LUNDI=[1,2,3,4,5,6,0];        // indices getDay() dans l'ordre ISO (lundi d'abord)
-  var MODULE_CHRONO='heures';             // module dont l'onglet porte la pastille « en cours »
 
   /* Expressions régulières PRIVÉES : jamais exposées (une RegExp exposée reste
      mutable via RegExp.prototype.compile, même dans un objet gelé). */
@@ -961,7 +957,7 @@
   });
   function migrationEnAttente(){ return migrationAttente?prefs():null; }
   // Après toute écriture réussie d'une AUTRE clé : la place a peut-être été libérée →
-  // on retente la migration en attente ; l'onglet Heures suit le chrono de cet onglet.
+  // on retente la migration en attente.
   var retentePlanifiee=false;
   function apresEcritureReelle(cle){
     if(etatsTemoin.stockage){ delete etatsTemoin.stockage; }
@@ -969,7 +965,6 @@
       retentePlanifiee=true;
       setTimeout(function(){ retentePlanifiee=false; if(migrationAttente) sauvegardePrefs.maintenant(); }, 0);
     }
-    if(cle===CLES.heures) nav.rafraichir();
   }
 
   function prefs(){ return { accent:prefsCourantes.accent, mark:prefsCourantes.mark, logo:prefsCourantes.logo, motif:prefsCourantes.motif }; }
@@ -1257,33 +1252,6 @@
     var fin=normaliserDetail(r.res, true);
     return { plages:fin.plages, rognees:r.rognees, plafonnees:fin.plafonnees };
   }
-  /* §6.3 — chrono → plages : découpe aux minuits LOCAUX, fin = début + durée RÉELLE
-     (les jours de changement d'heure, la fin affichée suit la durée réellement
-     travaillée). Morceau ignoré si sa durée réelle ou arrondie est < 1 min. */
-  function decouperSegment(debut, fin, pas, mode){
-    var t0=Number(debut instanceof Date?debut.getTime():debut), t1=Number(fin instanceof Date?fin.getTime():fin);
-    var res={ plagesParJour:{}, horlogeReculee:false };
-    if(!isFinite(t0) || !isFinite(t1)){ res.erreur={ code:'invalide', message:'Horodatage invalide.' }; return res; }
-    if(t1<t0){ res.horlogeReculee=true; return res; }
-    var favorable=(mode==='favorable'), morceaux=[], cur=t0;
-    while(cur<t1){
-      var dc=new Date(cur), minuit=new Date(dc.getFullYear(), dc.getMonth(), dc.getDate()+1).getTime();
-      var bout=Math.min(t1, minuit);
-      morceaux.push([cur, bout]); cur=bout;
-      if(morceaux.length>8){ return { plagesParJour:{}, horlogeReculee:false, erreur:{ code:'trop-long', message:'Segment de plus de 8 jours : refusé.' } }; }
-    }
-    morceaux.forEach(function(m){
-      var dd=new Date(m[0]), reel=(m[1]-m[0])/60000;
-      if(reel<1) return;
-      var dBrut=dd.getHours()*60+dd.getMinutes()+dd.getSeconds()/60+dd.getMilliseconds()/60000;
-      var d=arrondir(dBrut, pas, favorable?'bas':'proche'), f=Math.min(1440, arrondir(dBrut+reel, pas, favorable?'haut':'proche'));
-      if(f-d<1) return;
-      var cle=cleDate(dd);
-      (res.plagesParJour[cle]=res.plagesParJour[cle]||[]).push({ d:versHHMM(d), f:versHHMM(f) });
-    });
-    return res;
-  }
-
   /* §6.8 — saisie rapide : « 9-12:30 13:30-17 @projet note » */
   function normaliserSaisie(t){
     t=String(t==null?'':t);
@@ -1386,8 +1354,8 @@
   /* §8 — réglages (bornes) */
   function reglagesDefaut(){
     return { objHebdoMin:2100, dureeJourMin:420, joursOuvres:[1,2,3,4,5], debutHabituel:'09:00', pauseDejMin:60, coupure:'13:00',
-      seuilDemiMin:null, rattrapage:true, arrondiMin:1, modeArrondi:'proche', alerteOubliMin:600, projetDemarrage:'dernier',
-      vibration:true, autoPointer:false, journeeType:null, raccourcis:true, rappelSauvegardeJours:30, saisieRapide:false, balanceDepuis:null };
+      seuilDemiMin:null, rattrapage:true, arrondiMin:1, modeArrondi:'proche',
+      journeeType:null, raccourcis:true, rappelSauvegardeJours:30, saisieRapide:false, balanceDepuis:null };
   }
   function idsProjets(projets){
     if(!Array.isArray(projets)) return null;
@@ -1420,10 +1388,9 @@
     } else r.seuilDemiMin=null;
     booleen('rattrapage');
     parmi('arrondiMin', [1,5,10,15]);
-    parmi('modeArrondi', ['proche','favorable']);
-    entier('alerteOubliMin', 120, 1440);
-    parmi('projetDemarrage', ['dernier','aucun']);
-    booleen('vibration'); booleen('autoPointer');                  // « secondes » (ancien) : ignoré sans bruit
+    parmi('modeArrondi', ['proche','favorable']);                  // arrondi de « Maintenant » et des durées (« 2h »)
+    // Anciens réglages du chrono retiré (alerteOubliMin, projetDemarrage, vibration, autoPointer,
+    // secondes) : clés inconnues, ignorées sans bruit (statut 'ok'), jamais réécrites.
     if(a('journeeType') && o.journeeType!==null){
       if(Array.isArray(o.journeeType)){
         var jt=[];
@@ -1461,43 +1428,35 @@
     if(!am && !pm && r.rattrapage && minAm+minPm>=seuil){ if(minAm>=minPm) am=true; else pm=true; }   // égalité : matin
     return { am:am, pm:pm, minAm:minAm, minPm:minPm };
   }
-  /* §6.12 — dû d'un jour, PURE : contrat réel réparti sur les jours ouvrés (minutes EXACTES,
-     sans pas de 15 min) = objHebdoMin / nombre de jours ouvrés ; objHebdoMin = 0 → repli sur
-     dureeJourMin ; 0 hors jours ouvrés. cle : 'AAAA-MM-JJ' ou n° ISO du jour (1 = lundi … 7). */
+  /* §6.12 — dû d'un jour, PURE (règle UNIQUE : balance, jauge du jour, bande semaine, ruche) :
+     reglages.dureeJourMin (« Durée d'une journée ») si le jour est ouvré (reglages.joursOuvres),
+     0 sinon. cle : 'AAAA-MM-JJ' ou n° ISO du jour (1 = lundi … 7). */
+  function duDe(r, iso){ return (Number.isInteger(iso) && r.joursOuvres.indexOf(iso)!==-1)?r.dureeJourMin:0; }
+  function isoDeCle(cle){ var d=depuisCle(cle); return d?((d.getDay()+6)%7)+1:0; }
   function duJour(reglages, cle){
-    var r=validerReglages(reglages), iso=cle;
-    if(typeof cle==='string'){ var d=depuisCle(cle); if(!d) return 0; iso=((d.getDay()+6)%7)+1; }
-    if(!Number.isInteger(iso) || r.joursOuvres.indexOf(iso)===-1) return 0;
-    return r.objHebdoMin?r.objHebdoMin/r.joursOuvres.length:r.dureeJourMin;
+    var r=validerReglages(reglages);
+    return duDe(r, (typeof cle==='string')?isoDeCle(cle):cle);
   }
   /* §6.12 — balance d'heures (heures sup / à rattraper), PURE. Jours comptés : de
-     reglages.balanceDepuis (inclus ; null = depuis le début) à aujourd'hui inclus.
-     Jour SAISI (au moins une plage) : écart = total du jour (union) − dû (duJour) ; un week-end
-     travaillé = heures sup. Jour SANS plage : ignoré (congé), sauf s'il est marqué en
-     RÉCUPÉRATION (donnees.recup) : il compte − dû (il solde des heures sup), aujourd'hui compris.
-     Jours futurs ignorés ; aujourd'hui saisi ne compte en négatif qu'une fois terminé
-     (contribution = max(0, écart)), SAUF un jour de récupération, compté tout de suite
-     (avec ou sans plage : la règle est la même dans les deux cas). vivants (facultatif) : {cle:[{d,f}]} — segment du chrono
-     en cours découpé par jour (decouperSegment), compté dans le total de son jour.
+     reglages.balanceDepuis (inclus ; null = depuis le début) à aujourd'hui inclus, futurs ignorés.
+     Jour RENSEIGNÉ (au moins une plage), aujourd'hui compris : écart = total du jour (union) − dû
+     (duJour), en positif comme en négatif ; un jour non ouvré renseigné = heures sup.
+     Jour SANS plage : ignoré, sauf s'il est marqué en RÉCUPÉRATION (donnees.recup) : il compte − dû.
      → {min (signé, arrondi à la minute), jours (nombre de jours comptés)} */
-  function balance(donnees, maintenant, vivants){
+  function balance(donnees, maintenant){
     var out={ min:0, jours:0 };
     if(!objetSimple(donnees) || !objetSimple(donnees.jours)) return out;
     var now=(typeof maintenant==='number' && isFinite(maintenant))?maintenant:Date.now();
-    var today=cleDate(new Date(now)), r=validerReglages(donnees.reglages), viv=objetSimple(vivants)?vivants:{};
+    var today=cleDate(new Date(now)), r=validerReglages(donnees.reglages);
     var depuis=r.balanceDepuis||'', recup=Object.create(null), vus=Object.create(null), somme=0;
     validerRecup(donnees.recup).liste.forEach(function(k){ recup[k]=true; });
-    Object.keys(donnees.jours).concat(Object.keys(viv), Object.keys(recup)).forEach(function(cle){
+    Object.keys(donnees.jours).concat(Object.keys(recup)).forEach(function(cle){
       if(vus[cle] || !cleValide(cle) || cle>today || cle<depuis) return;
       vus[cle]=true;
-      var pl=[];
-      if(aPropre.call(donnees.jours, cle) && Array.isArray(donnees.jours[cle])) pl=pl.concat(donnees.jours[cle]);
-      if(aPropre.call(viv, cle) && Array.isArray(viv[cle])) pl=pl.concat(viv[cle]);
-      var du=duJour(r, cle), ecart;
-      if(pl.length){
-        ecart=unionMinutes(pl)-du;
-        if(cle===today && !recup[cle]) ecart=Math.max(0, ecart);   // récupération : comptée tout de suite
-      } else if(recup[cle] && du) ecart=-du;                         // récupération un jour non dû : sans effet
+      var pl=(aPropre.call(donnees.jours, cle) && Array.isArray(donnees.jours[cle]))?donnees.jours[cle]:[];
+      var du=duDe(r, isoDeCle(cle)), ecart;
+      if(pl.length) ecart=unionMinutes(pl)-du;
+      else if(recup[cle] && du) ecart=-du;                           // récupération un jour non dû : sans effet
       else return;
       somme+=ecart; out.jours++;
     });
@@ -1605,17 +1564,6 @@
   }
 
   /* §5.2 — validation des données (reconstruction champ par champ) */
-  function validerChrono(c, projets, maintenant){
-    if(!objetSimple(c) || typeof c.s!=='string' || !RX.idSession.test(c.s)) return null;
-    var now=(typeof maintenant==='number' && isFinite(maintenant))?maintenant:Date.now();
-    var connus=(projets && !Array.isArray(projets))?projets:idsProjets(projets);
-    function borne(t){ return typeof t==='number' && isFinite(t) && t>=946684800000 && t<=now+86400000; }
-    var o={ e:'', t0:null, tp:null, p:projetConnu(c.p, connus)?c.p:'', n:texteNettoye(c.n, H_LIMITES.note), s:c.s };
-    if(c.e==='marche'){ if(!borne(c.t0) || c.tp!=null) return null; o.e='marche'; o.t0=c.t0; }
-    else if(c.e==='pause'){ if(!borne(c.tp) || c.t0!=null) return null; o.e='pause'; o.tp=c.tp; }
-    else return null;
-    return o;
-  }
   function validerPlageH(x, connus){
     if(!objetSimple(x)) return null;
     var d=valide.heure(x.d)?x.d:null, f=(x.f==='24:00' || valide.heure(x.f))?x.f:null;
@@ -1636,7 +1584,7 @@
     var rapport={ statut:'ok', ignores:0, details:[] }, vus={};
     function ignorer(cat, n){ rapport.ignores+=(n||1); if(!vus[cat]){ vus[cat]=true; rapport.details.push(cat); } }
 
-    var d={ v:1, rev:(Number.isInteger(brut.rev) && brut.rev>=0)?brut.rev:0, jours:Object.create(null), chrono:null, projets:[], reglages:null, recup:[], meta:null };
+    var d={ v:1, rev:(Number.isInteger(brut.rev) && brut.rev>=0)?brut.rev:0, jours:Object.create(null), projets:[], reglages:null, recup:[], meta:null };
     // Projets d'abord : les références des plages s'y résolvent.
     var connus=Object.create(null);
     if(Array.isArray(brut.projets)){
@@ -1679,8 +1627,8 @@
     d.recup=rc.liste;
     if(rc.ignores) ignorer('récupération invalide', rc.ignores);
 
-    d.chrono=validerChrono(brut.chrono, connus, maintenant);
-    if(brut.chrono!=null && !d.chrono) ignorer('chrono invalide');
+    // Champ « chrono » des anciennes sauvegardes (en marche ou en pause) : ignoré sans bruit, jamais
+    // réécrit (le chrono est retiré) ; ses plages d'origine 'c' déjà enregistrées restent valides.
 
     var m=objetSimple(brut.meta)?brut.meta:{};
     d.meta={ creeLe:cleValide(m.creeLe)?m.creeLe:cleDate(new Date(maintenant)), derniereSauvegarde:cleValide(m.derniereSauvegarde)?m.derniereSauvegarde:null, accueilVu:m.accueilVu===true };
@@ -1696,9 +1644,9 @@
   }
   var heures=Object.freeze({
     CLE:CLES.heures, LIMITES:H_LIMITES, reglagesDefaut:reglagesDefaut, validerReglages:validerReglages,
-    valider:valider, lire:lireHeures, validerChrono:validerChrono,
+    valider:valider, lire:lireHeures,
     minutes:minutes, versHHMM:versHHMM, arrondir:arrondir, unionMinutes:unionMinutes,
-    normaliserJour:normaliserJour, normaliserDetail:normaliserDetail, insererPlage:insererPlage, decouperSegment:decouperSegment, analyserSaisie:analyserSaisie,
+    normaliserJour:normaliserJour, normaliserDetail:normaliserDetail, insererPlage:insererPlage, analyserSaisie:analyserSaisie,
     demiJournees:demiJournees, seuilDemi:seuilDemi, seuilAuto:seuilAuto, activiteJour:activiteJour, resumeMois:resumeMois,
     balance:balance, duJour:duJour, validerRecup:validerRecup, decouperPause:decouperPause, insererAvecPause:insererAvecPause,
     planifierImport:planifierImport, lireHashCra:lireHashCra, hashCra:hashCra
@@ -1707,38 +1655,11 @@
   /* ============================================================
      NAVIGATION — la liste des modules est le <nav> STATIQUE du HTML
      (une seule source, aucun décalage de mise en page). TAF.nav ne
-     fait que l'enrichir : aria-current, retour en haut, pastille
-     « en cours » sur l'onglet Heures (lecture SEULE de taf_heures_v1).
+     fait que l'enrichir : aria-current, retour en haut.
   ============================================================ */
   function moduleActif(){ return (doc && doc.body && doc.body.getAttribute('data-module'))||''; }
   var nav=(function(){
-    var lien=null, pastille=null, base='', timer=null, pret=false;
-    // Pastille = un POINT seul (plein en marche, demi en pause), sans durée qui défile :
-    // aucun rafraîchissement à la minute ; mise à jour sur l'événement storage.
-    function etatPastille(chrono, maintenant){
-      if(!objetSimple(chrono)) return null;
-      if(chrono.e==='pause') return { etat:'pause', libelle:'chrono en pause', prochaine:null };
-      if(chrono.e!=='marche' || typeof chrono.t0!=='number' || !isFinite(chrono.t0)) return null;
-      return { etat:'marche', libelle:'chrono en cours', prochaine:null };
-    }
-    function lireChrono(){
-      var t=stockage.lireTexte(CLES.heures); if(t==null) return null;
-      var o; try{ o=JSON.parse(t); }catch(e){ return null; }
-      return (objetSimple(o) && o.v===1)?validerChrono(o.chrono, null, Date.now()):null;   // même validateur que heures.valider
-    }
-    function rafraichir(){
-      if(!lien) return;
-      if(timer){ clearTimeout(timer); timer=null; }
-      var e=etatPastille(lireChrono(), Date.now());
-      if(!e){ if(pastille) pastille.hidden=true; lien.removeAttribute('aria-label'); return; }
-      if(!pastille){
-        pastille=el('span', { class:'taf-nav-pastille', 'aria-hidden':'true' }, [ el('span', { class:'tnp-point' }) ]);
-        lien.appendChild(pastille);
-      }
-      pastille.setAttribute('data-etat', e.etat); pastille.hidden=false;
-      lien.setAttribute('aria-label', base+', '+e.libelle);
-      if(e.prochaine!=null && doc.visibilityState!=='hidden') timer=setTimeout(rafraichir, e.prochaine+40);
-    }
+    var pret=false;
     function init(){
       if(pret || !doc || !doc.body) return; pret=true;
       var actif=moduleActif();
@@ -1751,19 +1672,8 @@
           try{ global.scrollTo({ top:0, behavior:mouvementReduit()?'auto':'smooth' }); }catch(_){ global.scrollTo(0,0); }
         });
       });
-      lien=doc.querySelector('.taf-nav a[data-module="'+MODULE_CHRONO+'"]');
-      if(!lien) return;
-      base=(lien.textContent||'').replace(/\s+/g, ' ').trim();
-      rafraichir();
-      global.addEventListener('storage', function(e){
-        if(e.key!==null && e.key!==CLES.heures) return;
-        try{ if(e.storageArea && e.storageArea!==global.localStorage) return; }catch(_){ return; }
-        rafraichir();
-      });
-      doc.addEventListener('visibilitychange', function(){ if(doc.visibilityState==='visible') rafraichir(); else if(timer){ clearTimeout(timer); timer=null; } });
-      global.addEventListener('pageshow', function(e){ if(e.persisted) rafraichir(); });
     }
-    return Object.freeze({ init:init, rafraichir:rafraichir, etatPastille:etatPastille });
+    return Object.freeze({ init:init });
   })();
 
   /* ============================================================
@@ -1798,7 +1708,7 @@
      ANTI-CADRE (clickjacking) — frame-ancestors est ignoré dans une CSP
      <meta> et GitHub Pages n'envoie ni X-Frame-Options ni CSP en en-tête.
      Encadrée par une page tierce, une page de module ne lit ni n'écrit
-     RIEN (pas de migration, pas de #pointer / autoPointer, pas d'import
+     RIEN (pas de migration, pas d'import
      #heures-AAAA-MM) : contenu inerte + avis « Ouvrir dans un onglet ».
   ============================================================ */
   function estEncadre(g){ try{ return g.self!==g.top; }catch(e){ return true; } }   // pure : accès refusé = encadré

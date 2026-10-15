@@ -6,11 +6,11 @@
    relecture + validation avant chaque écriture, instantané ciblé pour Annuler,
    écriture SYNCHRONE, retour arrière si le quota (ou la limite) échoue.
 
-   Le temps n'est JAMAIS compté en mémoire : tout dérive des horodatages du
-   chrono et des plages stockées (survie au rechargement, au bfcache, à la
-   veille et aux autres onglets). Pointeuse, frises, jauges, ruche, totaux et
-   exports sont DÉRIVÉS de l'unique état D (aucune seconde copie). Une seule
-   Pointeuse (dock / pilule / carte : CSS), une seule logique mobile / bureau.
+   Le temps n'est JAMAIS compté en mémoire : tout dérive des plages stockées
+   (survie au rechargement, au bfcache, à la veille et aux autres onglets).
+   Balance, frises, jauges, ruche, totaux et exports sont DÉRIVÉS de l'unique
+   état D (aucune seconde copie). Une seule carte Balance (barre / pilule /
+   carte : CSS), une seule logique mobile / bureau.
 
    Sécurité (docs/heures-spec.md §12) : DOM construit par TAF.el /
    createElement(NS) + textContent ; positions et niveaux via
@@ -20,10 +20,10 @@
    Sections :
       1. Constantes & utilitaires       9. Vue Mois (ruche, synthèse)
       2. État, lecture, muter()        10. Feuille Plage
-      3. Annuler / Rétablir            11. Feuille Chrono
-      4. Chrono                        12. Projets, journée type, saisie
-      5. Rendu : orchestration         13. Réglages (tiroir)
-      6. Pointeuse & bannières         14. Export / import
+      3. Annuler / Rétablir            12. Projets, journée type, saisie
+      4. Projets & dérivés             13. Réglages (tiroir)
+      5. Rendu : orchestration         14. Export / import
+      6. Balance & bannières
       7. Composants (jauge, frise)     15. Clavier & navigation
       8. Vues Jour & Semaine           16. Cycle de vie & initialisation
 ============================================================================ */
@@ -42,6 +42,7 @@
   var EASE='cubic-bezier(.22,.61,.27,1)';
   var VUES=['jour','semaine','mois'];
   var NOMS_VUES={ jour:'Jour', semaine:'Semaine', mois:'Mois' };
+  // Origine des plages : 'c' = ancien chrono (plages conservées et affichées), 's' = saisie, 'm' = journée type.
   var NOMS_ORIGINE={ c:'chrono', s:'saisie', m:'journée type' };
   var ICONE_ORIGINE={ c:'chrono', s:'saisie', m:'modele' };
   var CLE_UI='taf_heures_ui';
@@ -52,8 +53,6 @@
   function maintenant(){ return Date.now(); }
   function aujourdHui(){ return T.dates.cle(maintenant()); }
   function minutesMurales(ms){ var d=new Date(ms); return d.getHours()*60+d.getMinutes(); }
-  function heureDe(ms){ return versHHMM(minutesMurales(ms)); }
-  function heureParlee(ms){ var d=new Date(ms); return d.getHours()+' h '+pad2(d.getMinutes()); }
   function majuscule(s){ s=String(s==null?'':s); return s.charAt(0).toUpperCase()+s.slice(1); }
   function borner(x, a, b){ return Math.min(b, Math.max(a, x)); }
   function clone(o){ return (o===undefined)?undefined:JSON.parse(JSON.stringify(o)); }
@@ -77,9 +76,6 @@
     chrono:{ vb:'0 0 24 24', a:TRAIT, p:[{ t:'circle', cx:'12', cy:'13.5', r:'7.5' },{ d:'M12 10v3.5l2.5 1.6M9.5 2.5h5' }] },
     saisie:{ vb:'0 0 24 24', a:TRAIT, p:[{ d:'M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z' }] },
     modele:{ vb:'0 0 24 24', a:TRAIT, p:[{ d:'M12 2.8 20 7.4v9.2L12 21.2 4 16.6V7.4z' }] },
-    lecture:{ vb:'0 0 24 24', a:PLEIN, p:[{ d:'M8 5.6v12.8a1 1 0 0 0 1.52.85l10.3-6.4a1 1 0 0 0 0-1.7L9.52 4.75A1 1 0 0 0 8 5.6z' }] },
-    stop:{ vb:'0 0 24 24', a:PLEIN, p:[{ t:'rect', x:'6', y:'6', width:'12', height:'12', rx:'2.2' }] },
-    pause:{ vb:'0 0 24 24', a:PLEIN, p:[{ t:'rect', x:'6.5', y:'5', width:'4', height:'14', rx:'1.3' },{ t:'rect', x:'13.5', y:'5', width:'4', height:'14', rx:'1.3' }] },
     cra:{ vb:'0 0 24 24', a:TRAIT, p:[{ t:'rect', x:'3', y:'4', width:'18', height:'18', rx:'2' },{ d:'M16 2v4M8 2v4M3 10h18M8.5 15.5l2.5 2.5 4.5-5' }] },
     exporter:{ vb:'0 0 24 24', a:TRAIT, p:[{ d:'M12 3v12M8 11l4 4 4-4' },{ d:'M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2' }] },
     tableau:{ vb:'0 0 24 24', a:TRAIT, p:[{ t:'rect', x:'3', y:'4', width:'18', height:'16', rx:'2' },{ d:'M3 10h18M3 15h18M9 4v16' }] },
@@ -110,7 +106,7 @@
   var lectureSeule=false;      // illisible / futur : aucune écriture
 
   function donneesNeuves(){
-    return { v:1, rev:0, jours:Object.create(null), chrono:null, projets:[], reglages:H.reglagesDefaut(), recup:[],
+    return { v:1, rev:0, jours:Object.create(null), projets:[], reglages:H.reglagesDefaut(), recup:[],
       meta:{ creeLe:aujourdHui(), derniereSauvegarde:null, accueilVu:false } };
   }
   // Copie de travail : dictionnaire des jours SANS prototype, clés revalidées.
@@ -135,7 +131,28 @@
   function charger(){
     memoire=!T.stockage.lisible();
     if(memoire){ D=donneesNeuves(); statut='vide'; lectureSeule=false; dernierTexte=null; return; }
-    appliquerTexte(T.stockage.lireTexte(CLE));
+    var texte=T.stockage.lireTexte(CLE);
+    chronoRetire=chronoEnMarcheBrut(texte);
+    appliquerTexte(texte);
+  }
+  /* Le chrono a été retiré. Une ancienne sauvegarde peut contenir un chrono EN MARCHE, dont le
+     temps n'était pas encore enregistré en plage. On ne le convertit PAS en heures (presque
+     toujours un essai oublié : il fausserait la balance) ; on le SIGNALE une fois par session,
+     l'utilisateur ajoute une plage s'il le souhaite. Le champ disparaît à la prochaine écriture. */
+  var chronoRetire=null;
+  function chronoEnMarcheBrut(texte){
+    if(typeof texte!=='string' || texte.indexOf('"chrono"')===-1) return null;
+    try{
+      var c=JSON.parse(texte).chrono;
+      return (c && c.e==='marche' && typeof c.t0==='number' && isFinite(c.t0) && c.t0<=Date.now())?c.t0:null;
+    }catch(e){ return null; }
+  }
+  function signalerChronoRetire(){
+    if(chronoRetire==null) return;
+    try{ if(global.sessionStorage.getItem('taf_heures_chrono_signale')) return; global.sessionStorage.setItem('taf_heures_chrono_signale', '1'); }catch(e){}
+    var d=new Date(chronoRetire);
+    T.toast({ message:'Un ancien chrono était en marche depuis le '+fmt.dateFr(T.dates.cle(chronoRetire))+' à '+versHHMM(d.getHours()*60+d.getMinutes())
+      +' : ce temps n’est pas compté (le chrono a été retiré). Ajoutez une plage si besoin.', type:'info', duree:12000 });
   }
   function R(){ return D.reglages; }
   function plagesDe(cle){ var l=D.jours[cle]; return Array.isArray(l)?l:[]; }
@@ -164,7 +181,6 @@
     var ids=Object.create(null);
     e.projets.forEach(function(p){ ids[p.id]=true; });
     Object.keys(e.jours).forEach(function(k){ e.jours[k].forEach(function(x){ if(x.p && !ids[x.p]) x.p=''; }); });
-    if(e.chrono && e.chrono.p && !ids[e.chrono.p]) e.chrono.p='';
     if(e.reglages && Array.isArray(e.reglages.journeeType)) e.reglages.journeeType.forEach(function(x){ if(x.p && !ids[x.p]) x.p=''; });
   }
 
@@ -178,10 +194,9 @@
        4. rev + 1, borne 2 000 000 caractères, setItem SYNCHRONE ;
        5. échec : l'état en mémoire n'a jamais changé (retour arrière), témoin en échec.
      options : pile ('annuler' défaut | 'retablir' | false), garderRetablir, rendu (false),
-               differerRendu (ms), anim (défaut true), note (écriture différée de la note). */
+               differerRendu (ms), anim (défaut true). */
   function muter(libelle, fn, opts){
     opts=opts||{};
-    if(!opts.note) viderNote();
     if(lectureSeule){ signalerLectureSeule(); return null; }
     if(!memoire){
       var frais=T.stockage.lireTexte(CLE);
@@ -202,7 +217,7 @@
     catch(err){ T.toast({ message:(err && err.message)?err.message:'Action impossible.', type:'erreur' }); return null; }
     var avant={ jours:{} }, change=touches.length>0;
     touches.forEach(function(k){ avant.jours[k]=base.jours[k]?clone(base.jours[k]):null; });
-    ['chrono','projets','reglages','recup','meta'].forEach(function(k){
+    ['projets','reglages','recup','meta'].forEach(function(k){
       if(JSON.stringify(base[k])!==JSON.stringify(e[k])){ avant[k]=clone(base[k]); change=true; }
     });
     if(!change) return { inchange:true, res:res, touches:[] };
@@ -255,7 +270,7 @@
         var v=instantane.jours[k];
         if(v) e.jours[k]=clone(v); else delete e.jours[k];
       });
-      ['chrono','projets','reglages','recup','meta'].forEach(function(k){ if(aPropre(instantane, k)) e[k]=clone(instantane[k]); });
+      ['projets','reglages','recup','meta'].forEach(function(k){ if(aPropre(instantane, k)) e[k]=clone(instantane[k]); });
     };
   }
   function annuler(){
@@ -286,10 +301,7 @@
   }
 
   /* ============================================================
-     4. CHRONO — horodatages stockés (t0 / tp), jamais un compteur.
-        Pause / Arrêter : le segment [t0, maintenant] est découpé aux
-        minuits locaux, arrondi selon les réglages (TAF.heures) et
-        inséré (« la plus récente gagne »), dans la MÊME mutation.
+     4. PROJETS & DÉRIVÉS — tout se lit dans D (aucune seconde copie).
   ============================================================ */
   function projetDe(id){
     if(!id) return null;
@@ -299,15 +311,6 @@
   function projetActif(id){ var p=projetDe(id); return !!(p && !p.a); }
   function nomProjet(id){ var p=projetDe(id); return p?p.nom:'Sans projet'; }
   function clesTriees(){ return Object.keys(D.jours).sort(); }
-  // Projet de la plage d'origine chrono la plus récente (§4.1) — dérivé, jamais stocké.
-  function dernierProjetChrono(){
-    var cles=clesTriees();
-    for(var i=cles.length-1;i>=0;i--){
-      var l=D.jours[cles[i]];
-      for(var j=l.length-1;j>=0;j--){ if(l[j].o==='c') return projetActif(l[j].p)?l[j].p:''; }
-    }
-    return '';
-  }
   // Projets récents (dérivés des plages), actifs, du plus récent au plus ancien.
   function projetsRecents(n){
     var vus=[], cles=clesTriees();
@@ -317,49 +320,10 @@
     }
     return vus;
   }
-  function plagesSession(s){
-    var out=[];
-    if(!s) return out;
-    clesTriees().forEach(function(k){ D.jours[k].forEach(function(x){ if(x.s===s) out.push({ cle:k, d:x.d, f:x.f, id:x.id }); }); });
-    return out;
-  }
-  function minutesSession(s){ return plagesSession(s).reduce(function(t, x){ return t+minutes(x.f)-minutes(x.d); }, 0); }
+  /* Contexte d'un rendu : maintenant et aujourd'hui (le temps n'est jamais compté en mémoire). */
+  function contexte(now){ return { now:now, today:T.dates.cle(now) }; }
+  function totalJour(cle){ return H.unionMinutes(plagesDe(cle)); }
 
-  /* Contexte d'un rendu : maintenant, aujourd'hui, segment vivant découpé par jour. */
-  function contexte(now){
-    var c=D.chrono, viv={};
-    if(c && c.e==='marche'){
-      var r=H.decouperSegment(c.t0, now, 1, 'proche');
-      if(!r.erreur && !r.horlogeReculee) viv=r.plagesParJour;
-    }
-    return { now:now, today:T.dates.cle(now), vivants:viv };
-  }
-  function vivantDe(cle, ctx){
-    var c=D.chrono;
-    if(!c || !aPropre(ctx.vivants, cle)) return [];
-    return ctx.vivants[cle].map(function(x){ return { d:x.d, f:x.f, p:c.p, n:c.n, vivant:true }; });
-  }
-  function plagesAvecVivant(cle, ctx){ return plagesDe(cle).concat(vivantDe(cle, ctx)); }
-  function totalJour(cle, ctx){ return H.unionMinutes(plagesAvecVivant(cle, ctx)); }
-
-  // Segment [t0, fin] → plages o:'c' de la session (dans la copie e).
-  function enregistrerSegment(e, finMs){
-    var c=e.chrono, reg=e.reglages;
-    var dec=H.decouperSegment(c.t0, finMs, reg.arrondiMin, reg.modeArrondi);
-    var out={ minutes:0, rognees:[], vide:true, recule:!!dec.horlogeReculee, erreur:dec.erreur||null };
-    if(dec.erreur) return out;
-    Object.keys(dec.plagesParJour).forEach(function(cle){
-      if(!T.dates.cleValide(cle)) return;
-      dec.plagesParJour[cle].forEach(function(x){
-        var plage={ id:T.id('h'), d:x.d, f:x.f, p:c.p||'', n:c.n||'', o:'c', s:c.s };
-        var r=H.insererPlage(e.jours[cle]||[], plage);
-        e.jours[cle]=r.plages;
-        r.rognees.forEach(function(g){ if(g.avant.s!==c.s) out.rognees.push(g); });
-        out.minutes+=minutes(x.f)-minutes(x.d); out.vide=false;
-      });
-    });
-    return out;
-  }
   // « · 13:00–14:00 rognée » (toast) — décrit la plage existante modifiée.
   function suffixeRognees(rognees){
     if(!rognees || !rognees.length) return '';
@@ -367,182 +331,11 @@
     var g=rognees[0], a=g.avant;
     return ' · '+a.d+'–'+a.f+(g.type==='supprimee'?' remplacée':(g.type==='scindee'?' scindée':' rognée'));
   }
-  function arrondiSeconde(ms){ return Math.floor(ms/1000)*1000; }
+  // Stockage persistant demandé une fois, à la première plage enregistrée de la session.
   var persistDemandee=false;
   function demanderPersistance(){
     if(persistDemandee) return; persistDemandee=true;
     try{ var s=global.navigator.storage; if(s && typeof s.persist==='function') s.persist().then(majPersistance, function(){}); }catch(e){}
-  }
-  function vibrer(){ if(R().vibration) T.vibrer(10); }
-
-  function demarrerChrono(t0, opts){
-    opts=opts||{};
-    var now=maintenant();
-    var debut=(typeof t0==='number' && isFinite(t0))?arrondiSeconde(t0):arrondiSeconde(now);
-    if(debut>now){ T.toast({ message:'Cette heure n’est pas encore passée.', type:'erreur' }); return null; }
-    if(debut<now-J24){ T.toast({ message:'Début limité aux dernières 24 heures.', type:'erreur' }); return null; }
-    var p=(typeof opts.p==='string')?opts.p:(R().projetDemarrage==='dernier'?dernierProjetChrono():'');
-    var n=nettoyer(opts.n||'', LIM.note);
-    var r=muter(opts.libelle||'Démarrer le chrono', function(e){
-      if(e.chrono) return false;                                 // déjà démarré (autre onglet)
-      var ok=e.projets.some(function(x){ return x.id===p; });
-      e.chrono={ e:'marche', t0:debut, tp:null, p:ok?p:'', n:n, s:T.id('s') };
-    });
-    if(!r){ rendre({ anim:false }); return null; }
-    demanderPersistance(); vibrer(); animerHex();
-    T.annoncer('Chrono démarré à '+heureParlee(debut)+(D.chrono.p?', projet '+nomProjet(D.chrono.p):''));
-    return r;
-  }
-  function pauseChrono(opts){
-    opts=opts||{};
-    var c=D.chrono; if(!c || c.e!=='marche') return null;
-    var now=maintenant();
-    if(now-c.t0>J24 && !opts.confirme){ demanderConfirmation24('pause'); return null; }
-    var seg=null, s=c.s;
-    var r=muter('Pause du chrono', function(e){
-      if(!e.chrono || e.chrono.e!=='marche' || e.chrono.s!==s) return false;
-      seg=enregistrerSegment(e, now);
-      if(seg.erreur) return false;
-      e.chrono={ e:'pause', t0:null, tp:now, p:e.chrono.p, n:e.chrono.n, s:s };
-    });
-    if(!r){ if(seg && seg.erreur) segmentTropLong(); else rendre({ anim:false }); return null; }
-    vibrer(); animerHex();
-    if(seg.recule) T.toast({ message:'L’horloge de l’appareil a reculé : rien n’a été enregistré.', type:'erreur' });
-    else if(seg.vide) toastAnnulable('Moins d’une minute — ignoré', r.entree, 'info');
-    else if(seg.rognees.length) toastAnnulable('Pause · '+fmt.duree(seg.minutes)+' enregistrées'+suffixeRognees(seg.rognees), r.entree);
-    else T.annoncer('Pause, segment de '+fmt.dureeLongue(seg.minutes)+' enregistré');
-    return r;
-  }
-  function reprendreChrono(){
-    var c=D.chrono; if(!c || c.e!=='pause') return null;
-    var now=arrondiSeconde(maintenant()), s=c.s;
-    var r=muter('Reprendre le chrono', function(e){
-      if(!e.chrono || e.chrono.e!=='pause' || e.chrono.s!==s) return false;
-      e.chrono={ e:'marche', t0:now, tp:null, p:e.chrono.p, n:e.chrono.n, s:s };
-    });
-    if(!r){ rendre({ anim:false }); return null; }
-    vibrer(); animerHex();
-    T.annoncer('Chrono repris à '+heureParlee(now));
-    return r;
-  }
-  function arreterChrono(finMs, opts){
-    opts=opts||{};
-    var c=D.chrono; if(!c) return null;
-    var now=maintenant(), fin=(typeof finMs==='number' && isFinite(finMs))?finMs:now;
-    if(c.e==='marche'){
-      if(fin>now) fin=now;
-      if(fin<c.t0){ T.toast({ message:'L’heure d’arrêt précède le début ('+heureDe(c.t0)+').', type:'erreur' }); return null; }
-      if(fin-c.t0>J24 && !opts.confirme){ demanderConfirmation24('arreter', fin); return null; }
-    }
-    var seg=null, s=c.s;
-    var r=muter(opts.libelle||'Arrêter le chrono', function(e){
-      if(!e.chrono || e.chrono.s!==s) return false;
-      if(e.chrono.e==='marche'){ seg=enregistrerSegment(e, fin); if(seg.erreur) return false; }
-      e.chrono=null;
-    });
-    if(!r){ if(seg && seg.erreur) segmentTropLong(); else rendre({ anim:false }); return null; }
-    vibrer(); oubliTraite(s);
-    var total=minutesSession(s);
-    if(seg && seg.recule) T.toast({ message:'L’horloge de l’appareil a reculé : dernier segment ignoré.', type:'erreur' });
-    toastAnnulable(total?'Session enregistrée · '+fmt.duree(total)+suffixeRognees(seg && seg.rognees):'Moins d’une minute — ignoré', r.entree, total?'succes':'info');
-    return r;
-  }
-  function segmentTropLong(){
-    T.toast({ message:'Session de plus de 8 jours : choisissez l’heure d’arrêt.', type:'erreur', duree:7000 });
-    ouvrirFeuilleChrono('arreterA');
-  }
-  function basculerChrono(){
-    var c=D.chrono;
-    if(!c) return demarrerChrono();
-    if(c.e==='marche') return pauseChrono();
-    return reprendreChrono();
-  }
-  function corrigerDebut(t0){
-    var c=D.chrono; if(!c || c.e!=='marche') return null;
-    var now=maintenant(), s=c.s;
-    var nouveau=arrondiSeconde(borner(t0, now-J24, now));
-    if(nouveau!==t0 && Math.abs(nouveau-t0)>1000) T.toast({ message:'Début limité aux dernières 24 heures.', type:'info' });
-    var r=muter('Corriger le début', function(e){
-      if(!e.chrono || e.chrono.e!=='marche' || e.chrono.s!==s) return false;
-      e.chrono.t0=nouveau;
-    });
-    if(r && !r.inchange) T.annoncer('Début corrigé à '+heureParlee(nouveau));
-    return r;
-  }
-  // mode : 'maintenant' (marche : le segment en cours est enregistré avec l'ancien projet) | 'session'
-  function changerProjetChrono(p, mode){
-    var c=D.chrono; if(!c) return null;
-    var s=c.s, now=maintenant(), seg=null;
-    var r=muter('Changer de projet', function(e){
-      if(!e.chrono || e.chrono.s!==s) return false;
-      if(p && !e.projets.some(function(x){ return x.id===p; })) p='';
-      if(mode==='session'){
-        Object.keys(e.jours).forEach(function(k){ e.jours[k].forEach(function(x){ if(x.s===s) x.p=p; }); });
-        e.chrono.p=p;
-      } else if(e.chrono.e==='marche'){
-        seg=enregistrerSegment(e, now);
-        if(seg.erreur) return false;
-        e.chrono={ e:'marche', t0:arrondiSeconde(now), tp:null, p:p, n:e.chrono.n, s:s };
-      } else e.chrono.p=p;
-    });
-    if(!r || r.inchange) return r;
-    toastAnnulable('Projet : '+nomProjet(p)+(mode==='session'?' (toute la session)':(c.e==='marche'?' à partir de maintenant':'')), r.entree);
-    return r;
-  }
-
-  /* Note du chrono : seule écriture DIFFÉRÉE (300 ms), vidée sur pagehide /
-     visibilitychange:hidden, à la fermeture de la feuille et avant toute mutation. */
-  var noteEnAttente=null, timerNote=null;
-  function noterChrono(texte){
-    noteEnAttente=nettoyer(texte, LIM.note);
-    if(timerNote) clearTimeout(timerNote);
-    timerNote=setTimeout(viderNote, 300);
-  }
-  function viderNote(){
-    if(timerNote){ clearTimeout(timerNote); timerNote=null; }
-    if(noteEnAttente===null) return;
-    var n=noteEnAttente; noteEnAttente=null;
-    if(!D || !D.chrono || D.chrono.n===n) return;
-    muter('Note du chrono', function(e){ if(!e.chrono) return false; e.chrono.n=n; }, { note:true, pile:false, anim:false });
-  }
-
-  /* Chrono oublié (§4.1) : en marche depuis plus que le seuil, ou minuit franchi. */
-  function chronoOublie(now){
-    var c=D && D.chrono;
-    if(!c || c.e!=='marche') return null;
-    now=now||maintenant();
-    var duree=now-c.t0;
-    if(duree>R().alerteOubliMin*60000 || T.dates.cle(c.t0)!==T.dates.cle(now)) return { c:c, duree:Math.max(0, duree) };
-    return null;
-  }
-  function oubliTraite(s){
-    if(session.oublis.indexOf(s)===-1){ session.oublis.push(s); ecrireSession(); }
-  }
-  // Fin proposée : fin de la journée type du jour de t0, sinon t0 + durée de la journée ; bornée à maintenant.
-  function finProposee(c, now){
-    var cle=T.dates.cle(c.t0), d=T.dates.depuisCle(cle), jt=R().journeeType, finMin=null;
-    if(jt && jt.length) finMin=minutes(jt[jt.length-1].f);
-    var fin=(finMin!=null && d)?new Date(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(finMin/60), finMin%60).getTime():c.t0+R().dureeJourMin*60000;
-    if(fin<=c.t0) fin=c.t0+R().dureeJourMin*60000;
-    return Math.min(fin, now);
-  }
-  // « 09:02–24:00 mar. · 00:00–09:40 mer. »
-  function apercuDecoupe(t0, fin){
-    var dec=H.decouperSegment(t0, fin, R().arrondiMin, R().modeArrondi);
-    if(dec.erreur) return dec.erreur.message;
-    return Object.keys(dec.plagesParJour).sort().map(function(k){
-      return dec.plagesParJour[k].map(function(x){ return x.d+'–'+x.f+' '+fmt.dateCourte(k).split(' ')[0]; }).join(' · ');
-    }).join(' · ');
-  }
-  function heureRelative(ms, cleRef){
-    var k=T.dates.cle(ms), h=heureDe(ms);
-    if(k===cleRef) return h;
-    if(k===T.dates.ajouterJours(cleRef, -1)) return 'hier '+h;
-    return fmt.dateCourte(k)+' '+h;
-  }
-  function demanderConfirmation24(action, fin){
-    fc.confirm={ action:action, fin:(typeof fin==='number')?fin:null };
-    ouvrirFeuilleChrono('confirm');
   }
 
   /* ============================================================
@@ -553,7 +346,7 @@
         (niveaux, jauges, indicateurs) partent de leur valeur précédente.
   ============================================================ */
   var ui={ vue:'jour', ref:aujourdHui(), tableau:false, deplies:Object.create(null), menu:null, accueil:null, focusApres:null };
-  var session={ ref:null, oublis:[], oublisAnnonces:[], objectifs:[], rappelPlusTard:false, partielMasque:false };
+  var session={ ref:null, objectifs:[], rappelPlusTard:false, partielMasque:false };
   var dernierRendu='', derniereMinute=-1, dernierJour='';
   var memVal=Object.create(null);          // dernières valeurs animées, par clé
   var blocsVus=Object.create(null);        // ids des blocs de frise déjà affichés, par jour
@@ -565,11 +358,11 @@
     var o=null;
     try{ o=JSON.parse(global.sessionStorage.getItem(CLE_UI)||'null'); }catch(e){ o=null; }
     o=T.objetSimple(o)?o:{};
-    return { ref:T.dates.cleValide(o.ref)?o.ref:null, oublis:listeIds(o.oublis, /^s_[a-z0-9]{10}$/), oublisAnnonces:listeIds(o.oublisAnnonces, /^s_[a-z0-9]{10}$/),
+    return { ref:T.dates.cleValide(o.ref)?o.ref:null,
       objectifs:listeIds(o.objectifs, /^\d{4}-\d{2}-\d{2}$/), rappelPlusTard:o.rappelPlusTard===true, partielMasque:o.partielMasque===true };
   }
   function ecrireSession(){
-    try{ global.sessionStorage.setItem(CLE_UI, JSON.stringify({ ref:ui.ref, oublis:session.oublis.slice(-40), oublisAnnonces:session.oublisAnnonces.slice(-40),
+    try{ global.sessionStorage.setItem(CLE_UI, JSON.stringify({ ref:ui.ref,
       objectifs:session.objectifs.slice(-40), rappelPlusTard:session.rappelPlusTard, partielMasque:session.partielMasque })); }catch(e){}
   }
 
@@ -623,9 +416,8 @@
     rendreBannieres(ctx);
     rendreNavVues();
     rendreVue(ctx, o);
-    rendrePointeuse(ctx);
+    rendreBalance(ctx);
     rendreExtras(ctx);
-    if(fc.ouvert) rendreFeuilleChrono(ctx);
     majRaccourcis();
     derniereMinute=Math.floor(ctx.now/60000); dernierJour=ctx.today;
     planifierTick();
@@ -650,8 +442,8 @@
     dernierRendu=cle;
   }
 
-  /* Tick d'affichage : aligné sur la prochaine minute (plus aucun chiffre ne défile à la
-     seconde : balance, ligne d'état et totaux bougent à la minute). Suspendu onglet caché. */
+  /* Tick d'affichage : aligné sur la prochaine minute (repère « maintenant » des frises,
+     changement de jour de la balance). Suspendu onglet caché. */
   var timerTick=null;
   function planifierTick(){
     if(timerTick){ clearTimeout(timerTick); timerTick=null; }
@@ -669,7 +461,7 @@
     var now=maintenant(), m=Math.floor(now/60000), today=T.dates.cle(now);
     if(m!==derniereMinute){
       derniereMinute=m;
-      if(D.chrono || today!==dernierJour || (ui.vue!=='mois' && periodeContientAujourdhui(today))){ rendre({ anim:false }); return; }
+      if(today!==dernierJour || (ui.vue!=='mois' && periodeContientAujourdhui(today))){ rendre({ anim:false }); return; }
     }
     planifierTick();
   }
@@ -701,25 +493,14 @@
   }
 
   /* ============================================================
-     6. POINTEUSE (un seul composant) & BANNIÈRES
+     6. BALANCE D'HEURES (une seule carte) & BANNIÈRES
   ============================================================ */
-  var pt={ racine:$('pt'), hex:$('ptHex'), lib:$('ptHexLib'), stop:$('ptStop'), etatMot:$('ptEtatMot'), etatSuite:$('ptEtatSuite'), bal:$('ptBalance'), balVal:$('ptBalVal'), balLib:$('ptBalLib'), balSr:$('ptBalSr'),
-    info:$('ptInfo'), projet:$('ptProjet'), sec:$('ptSecondaires'), desc:$('etatChrono'), forme:null };
-  pt.forme=pt.hex?pt.hex.querySelector('.pt-hex-forme'):null;
-  var signatureEtat='';
-  function etatChrono(){ var c=D && D.chrono; return c?c.e:'repos'; }
-  function descriptionEtat(){
-    var c=D.chrono;
-    if(c && c.e==='marche') return 'Chrono en marche depuis '+heureParlee(c.t0)+(c.p?', projet '+nomProjet(c.p):'');
-    if(c && c.e==='pause') return 'Chrono en pause depuis '+heureParlee(c.tp)+(c.p?', projet '+nomProjet(c.p):'');
-    return 'Chrono à l’arrêt';
-  }
-  /* Balance cumulée (règle UNIQUE : TAF.heures.balance) à la place d'un compteur qui défile :
-     dérivée de D + segment vivant, mémorisée par état / jour / segment (rendu à la minute). */
+  var bal={ racine:$('bal'), val:$('balVal'), lib:$('balLib'), sr:$('balSr'), aide:$('balAide'), tap:$('balReglages') };
+  /* Balance cumulée (règle UNIQUE : TAF.heures.balance), dérivée de D et mémorisée par
+     état / jour (un rendu à la minute ne la recalcule que si la date change). */
   var memoBalance={ D:null, cle:'', v:null };
   function balanceCourante(ctx){
-    var cle=ctx.today+'|'+JSON.stringify(ctx.vivants);
-    if(memoBalance.D!==D || memoBalance.cle!==cle) memoBalance={ D:D, cle:cle, v:H.balance(D, ctx.now, ctx.vivants) };
+    if(memoBalance.D!==D || memoBalance.cle!==ctx.today) memoBalance={ D:D, cle:ctx.today, v:H.balance(D, ctx.now) };
     return memoBalance.v;
   }
   function texteBalance(min){
@@ -727,67 +508,39 @@
     if(min<0) return { signe:'moins', val:'− '+fmt.duree(-min), lib:'À rattraper', sr:'Balance d’heures : '+fmt.dureeLongue(-min)+' à rattraper' };
     return { signe:'zero', val:'0 min', lib:'À jour', sr:'Balance d’heures : à jour' };
   }
-  // Texte d'aide : valeurs RÉELLES des réglages (dû = TAF.heures.duJour, règle unique).
+  // Aide courte de la carte : dû réel (TAF.heures.duJour, règle unique) et nombre de jours comptés.
+  function aideCourte(jours){
+    var r=R(), du=r.joursOuvres.length?fmt.duree(r.dureeJourMin)+' par jour ouvré':'aucun jour ouvré';
+    return (jours?pluriel(jours, 'jour renseigné compté', 'jours renseignés comptés'):'Aucun jour renseigné')+' · '+du+(r.balanceDepuis?' · depuis le '+fmt.dateFr(r.balanceDepuis):'');
+  }
+  // Texte d'aide complet (réglages) : valeurs RÉELLES des réglages.
   function aideBalance(){
-    var r=R(), n=r.joursOuvres.length, du=n?Math.round(H.duJour(r, r.joursOuvres[0])):0;
-    var t=n?'cumul des jours saisis, chaque jour ouvré comparé à '+fmt.duree(du)
-      +(r.objHebdoMin?' (objectif hebdomadaire '+fmt.duree(r.objHebdoMin)+' ÷ '+pluriel(n, 'jour ouvré', 'jours ouvrés')+')':' (durée d’une journée)')+', 0 h les autres jours.'
-      :'aucun jour ouvré : toute heure saisie compte en heures sup.';
-    return t+' Les jours sans saisie ne comptent pas, sauf un jour marqué en récupération (il compte en négatif) ; le jour en cours ne compte en négatif qu’une fois terminé.'
+    var r=R(), n=r.joursOuvres.length;
+    var t=n?'Chaque jour renseigné (au moins une plage) est comparé à la durée d’une journée, '+fmt.duree(r.dureeJourMin)+' les jours ouvrés, 0 h les autres jours (tout y compte en heures sup). '
+      :'Aucun jour ouvré : toute heure saisie compte en heures sup. ';
+    // Exemple DÉRIVÉ du réglage (moitié de la journée, toujours inférieure au dû) : jamais de valeur en dur.
+    var ex=Math.max(5, Math.round(r.dureeJourMin/2/5)*5);
+    return t+'Les écarts s’additionnent, aujourd’hui compris dès qu’il est renseigné'
+      +(n?' ('+fmt.duree(ex)+' sur '+fmt.duree(r.dureeJourMin)+' = − '+fmt.duree(r.dureeJourMin-ex)+' tout de suite)':'')+'. '
+      +'Les jours sans plage et les jours à venir ne comptent pas, sauf un jour marqué en récupération (il compte en négatif).'
       +(r.balanceDepuis?' Comptée depuis le '+fmt.dateFr(r.balanceDepuis)+'.':'');
   }
-  // Ligne d'état UNIQUE (pointeuse et feuille Chrono) : {mot, suite}.
-  function ligneEtat(c, ctx){
-    if(c && c.e==='marche') return { mot:'En marche', suite:' depuis '+heureRelative(c.t0, ctx.today) };
-    if(c && c.e==='pause') return { mot:'En pause', suite:' depuis '+heureRelative(c.tp, ctx.today) };
-    return { mot:'Prêt', suite:'' };
-  }
-  function rendrePointeuse(ctx){
-    var c=D.chrono, etat=etatChrono();
-    pt.racine.setAttribute('data-etat', etat);
-    pt.hex.setAttribute('aria-label', (etat==='marche')?'Mettre en pause':(etat==='pause'?'Reprendre le chrono':'Démarrer le chrono'));
-    pt.lib.textContent=(etat==='marche')?'Pause':(etat==='pause'?'Reprendre':'Démarrer');
-    pt.stop.hidden=!c;
-    // « En marche » + « depuis 09:02 » (deux segments : très petit écran → « Depuis 09:02 » + pastille de forme)
-    var le=ligneEtat(c, ctx), mot=le.mot, suite=le.suite, proj=(c && c.p)?'· '+nomProjet(c.p):'';
-    if(pt.etatMot.textContent!==mot) pt.etatMot.textContent=mot;
-    if(pt.etatSuite.textContent!==suite) pt.etatSuite.textContent=suite;
-    if(pt.projet.textContent!==proj) pt.projet.textContent=proj;
-    var b=texteBalance(balanceCourante(ctx).min), avant=pt.balVal.textContent;
-    pt.bal.setAttribute('data-signe', b.signe);
+  function rendreBalance(ctx){
+    var v=balanceCourante(ctx), b=texteBalance(v.min), avant=bal.val.textContent;
+    bal.racine.setAttribute('data-signe', b.signe);
     if(avant!==b.val){
-      pt.balVal.textContent=b.val; pt.balLib.textContent=b.lib; pt.balSr.textContent=b.sr;
-      if(signatureEtat && !reduit() && typeof pt.balVal.animate==='function') pt.balVal.animate([{ opacity:.35, transform:'translateY(-18%)' },{ opacity:1, transform:'none' }], { duration:180, easing:EASE });
+      bal.val.textContent=b.val; bal.lib.textContent=b.lib; bal.sr.textContent=b.sr;
+      if(avant && !reduit() && typeof bal.val.animate==='function') bal.val.animate([{ opacity:.35, transform:'translateY(-18%)' },{ opacity:1, transform:'none' }], { duration:180, easing:EASE });
     }
-    var aide='Balance d’heures : '+aideBalance(); if(pt.info.title!==aide) pt.info.title=aide;
-    var sig=etat+'|'+(c?c.s+'|'+c.t0+'|'+c.tp+'|'+c.p:'');
-    if(sig!==signatureEtat){ pt.desc.textContent=descriptionEtat(); signatureEtat=sig; }
-    rendreSecondaires(etat, c);
-  }
-  function animerHex(){
-    if(reduit() || !pt.forme || typeof pt.forme.animate!=='function') return;
-    pt.forme.animate([{ transform:'scale(.94)' },{ transform:'scale(1)' }], { duration:180, easing:EASE });
-  }
-  function rendreSecondaires(etat, c){
-    var proj=c?c.p:(R().projetDemarrage==='dernier'?dernierProjetChrono():'');
-    var sig=etat+'|'+proj+'|'+(proj?nomProjet(proj):'');
-    if(pt.sec.getAttribute('data-sig')===sig) return;
-    pt.sec.setAttribute('data-sig', sig);
-    T.vider(pt.sec);
-    function ajouter(texte, section, attrs){
-      var b=el('button', Object.assign({ type:'button', class:'btn small ghost pt-sec', 'aria-haspopup':'dialog', 'aria-controls':'feuilleChrono' }, attrs||{}), texte);
-      b.addEventListener('click', function(){ ouvrirFeuilleChrono(section, b); });
-      pt.sec.appendChild(b);
-    }
-    if(etat==='repos') ajouter('Démarrer à…', 'demarrerA');
-    if(etat==='marche'){ ajouter('Arrêter à…', 'arreterA'); ajouter('Corriger le début', 'debut'); }
-    var p=projetDe(proj);
-    ajouter([p?monogramme(p):el('span', { class:'h-mono vide', 'aria-hidden':'true' }), el('span', { class:'pt-sec-nom', text:p?p.nom:'Sans projet' })], 'projet',
-      { 'aria-label':'Projet du chrono : '+(p?p.nom:'sans projet')+'. Changer', class:'btn small ghost pt-sec pt-sec-projet' });
+    var aide=aideCourte(v.jours);
+    if(bal.aide.textContent!==aide) bal.aide.textContent=aide;
+    // WCAG 2.5.3 : le nom accessible COMMENCE par le libellé visible (commande vocale « À rattraper »…).
+    var nom=b.lib+' '+b.val+' : explication et réglages de la balance';
+    if(bal.tap.getAttribute('aria-label')!==nom) bal.tap.setAttribute('aria-label', nom);
   }
 
-  /* Bannières (une à la fois, par priorité) : illisible / futur, éléments ignorés,
-     chrono oublié, stockage indisponible, rappel de sauvegarde. Mises à jour EN
+  /* Bannières (une à la fois, par priorité) : illisible / futur, stockage indisponible,
+     éléments ignorés, rappel de sauvegarde. Mises à jour EN
      PLACE si la même bannière reste affichée (pas de ré-annonce role=alert). */
   function joursDepuis(cle, today){
     var a=T.dates.depuisCle(cle), b=T.dates.depuisCle(today);
@@ -819,24 +572,8 @@
           illisible?'Elles ne sont ni modifiées ni écrasées. Exportez le brut pour les conserver, puis réinitialisez.':'Ces heures ont été créées par une version plus récente de TAF : consultation seulement.', acts, true);
       } };
     } else {
-      // Priorité (spec §3.3) : illisible / futur > chrono oublié > stockage indisponible > « partiel » (discret) > rappel.
-      var o=chronoOublie(ctx.now);
-      if(o && session.oublis.indexOf(o.c.s)===-1){
-        var titreOubli=function(){ return 'Chrono en marche depuis '+heureRelative(o.c.t0, ctx.today)+' ('+fmt.duree(Math.floor(o.duree/60000))+')'; };
-        var detailOubli=function(){ return 'Si vous arrêtez maintenant : '+apercuDecoupe(o.c.t0, ctx.now); };
-        spec={ type:'oubli', cle:o.c.s, maj:function(n){
-          n.querySelector('.h-ban-titre').textContent=titreOubli();
-          var d=n.querySelector('.h-ban-detail'); if(d) d.textContent=detailOubli();
-          var b=n.querySelector('[data-fin]'); if(b){ var f=finProposee(o.c, ctx.now); b.setAttribute('data-fin', String(f)); b.textContent='Arrêté à '+heureRelative(f, ctx.today); }
-        }, construire:function(){
-          var fin=finProposee(o.c, ctx.now), s=o.c.s, premiere=session.oublisAnnonces.indexOf(s)===-1;
-          if(premiere){ session.oublisAnnonces.push(s); ecrireSession(); }
-          var bFin=bouton('Arrêté à '+heureRelative(fin, ctx.today), 'btn small primary', function(){ arreterChrono(+bFin.getAttribute('data-fin'), { libelle:'Arrêter le chrono oublié' }); }, { 'data-fin':String(fin) });
-          var bChoisir=bouton('Choisir l’heure…', 'btn small', function(){ ouvrirFeuilleChrono('arreterA', bChoisir); }, { 'aria-haspopup':'dialog' });
-          return banniere('oubli', s, 'is-alerte', 'chrono', titreOubli(), detailOubli(), [ bFin, bChoisir,
-            bouton('C’est correct', 'btn small ghost', function(){ oubliTraite(s); rendreBannieres(contexte(maintenant())); focusSur(pt.hex); T.annoncer('Le chrono continue'); }) ], premiere);
-        } };
-      } else if(memoire){
+      // Priorité (spec §3.3) : illisible / futur > stockage indisponible > « partiel » (discret) > rappel.
+      if(memoire){
         spec={ type:'memoire', cle:'m', construire:function(){
           return banniere('memoire', 'm', 'is-alerte', 'alerte', 'Mode temporaire : rien n’est enregistré sur cet appareil',
             'Le stockage local est indisponible (navigation privée ou blocage). Exportez vos heures avant de fermer.', [ bouton('Exporter', 'btn small', function(e){ ouvrirExport(e.currentTarget, 'json'); }) ], false);
@@ -976,7 +713,7 @@
      accessible. Positions : --deb / --lar / --x en % bornés (CSSOM). */
   function axeFrise(rangees){
     var dMin=Infinity, fMax=-Infinity, c=minutes(R().coupure);
-    rangees.forEach(function(r){ r.plages.concat(r.vivant||[]).forEach(function(p){ dMin=Math.min(dMin, minutes(p.d)); fMax=Math.max(fMax, minutes(p.f)); }); });
+    rangees.forEach(function(r){ r.plages.forEach(function(p){ dMin=Math.min(dMin, minutes(p.d)); fMax=Math.max(fMax, minutes(p.f)); }); });
     if(!isFinite(dMin)) return { d:420, f:1140 };
     dMin=Math.min(dMin, c); fMax=Math.max(fMax, c);
     var d=Math.max(0, Math.floor((dMin-30)/60)*60), f=Math.min(1440, Math.ceil((fMax+30)/60)*60);
@@ -1016,11 +753,6 @@
         piste.appendChild(b);
       });
       blocsVus[r.cle]=ids;
-      (r.vivant||[]).forEach(function(p){
-        var deb=pct(minutes(p.d)), fin=pct(minutes(p.f)), b=el('span', { class:'h-bloc vivant' });
-        b.style.setProperty('--deb', deb.toFixed(3)+'%'); b.style.setProperty('--lar', Math.max(0.5, fin-deb).toFixed(3)+'%');
-        piste.appendChild(b);
-      });
       if(r.auj && nowMin>=axe.d && nowMin<=axe.f){ var ln=el('span', { class:'h-maintenant' }); ln.style.setProperty('--x', pct(nowMin).toFixed(3)+'%'); piste.appendChild(ln); }
       if(opts.surClic) (function(cle){
         piste.addEventListener('click', function(e){
@@ -1040,8 +772,10 @@
      8. VUES JOUR & SEMAINE
   ============================================================ */
   function ouvre(cle){ return R().joursOuvres.indexOf(isoJour(cle))!==-1; }
-  // Objectif affiché d'un jour : son dû (TAF.heures.duJour, même règle que la balance), sinon la durée d'une journée.
-  function objectifJour(cle){ return Math.round(H.duJour(R(), cle))||R().dureeJourMin; }
+  // Dû d'un jour (TAF.heures.duJour, MÊME règle que la balance) : durée d'une journée si ouvré, sinon 0.
+  function duDuJour(cle){ return Math.round(H.duJour(R(), cle)); }
+  // Échelle des jauges / niveaux : le dû, ou la durée d'une journée un jour non ouvré (dû nul).
+  function objectifJour(cle){ return duDuJour(cle)||R().dureeJourMin; }
   function estRecup(cle){ return Array.isArray(D.recup) && D.recup.indexOf(cle)!==-1; }
   function journeeType(){ var jt=R().journeeType; return (Array.isArray(jt) && jt.length)?jt:null; }
   function dureeJt(){ var jt=journeeType(); return jt?jt.reduce(function(t, x){ return t+minutes(x.f)-minutes(x.d); }, 0):0; }
@@ -1096,7 +830,7 @@
     var indic=el('span', { class:'h-bande-indic', 'aria-hidden':'true' });
     wrap.appendChild(indic);
     for(var i=0;i<7;i++){
-      var k=T.dates.ajouterJours(lundi, i), tot=totalJour(k, ctx), rec=estRecup(k);
+      var k=T.dates.ajouterJours(lundi, i), tot=totalJour(k), rec=estRecup(k);
       if(k===cle) idx=i;
       var b=el('button', { type:'button', class:'h-bj'+(ouvre(k)?'':' non-ouvre')+(k===ctx.today?' auj':'')+(rec?' recup':''), 'aria-pressed':String(k===cle),
         'aria-current':k===ctx.today?'date':null, 'aria-label':dateLongue(k)+', '+(tot?fmt.duree(tot):'rien')+(rec?', récupération':''), 'data-focus':'bj-'+i }, [
@@ -1113,16 +847,18 @@
 
   // Carte du jour : jauge (durée de la journée), total, reste / dépassement, ligne CRA, frise.
   function carteJour(cle, ctx, o){
-    var plages=plagesAvecVivant(cle, ctx), tot=H.unionMinutes(plages), obj=objectifJour(cle);
+    var plages=plagesDe(cle), tot=H.unionMinutes(plages), du=duDuJour(cle), obj=objectifJour(cle);
     var dj=H.demiJournees(plages, R());
-    var reste=(tot<obj)?'reste '+fmt.duree(obj-tot):((tot>obj)?'+ '+fmt.duree(tot-obj)+' au-delà':'journée complète');
+    // Écart du jour = sa contribution à la balance (même dû) : non ouvré → tout en heures sup.
+    var reste=!du?(tot?'+ '+fmt.duree(tot)+' en heures sup (jour non ouvré)':'jour non ouvré')
+      :((tot<du)?(tot?'− '+fmt.duree(du-tot)+' à rattraper':'reste '+fmt.duree(du)):((tot>du)?'+ '+fmt.duree(tot-du)+' en heures sup':'journée complète'));
     var texte=el('div', { class:'h-tot' }, [
-      el('p', { class:'h-tot-val', id:'jaugeJourTxt' }, [ el('b', { text:fmt.duree(tot) }), el('span', { text:' sur '+fmt.duree(obj) }) ]),
-      el('p', { class:'h-tot-reste'+(tot>obj?' depasse':''), text:reste }),
+      el('p', { class:'h-tot-val', id:'jaugeJourTxt' }, [ el('b', { text:fmt.duree(tot) }), el('span', { text:du?' sur '+fmt.duree(du):' · jour non ouvré' }) ]),
+      el('p', { class:'h-tot-reste'+((tot>du && tot)?' depasse':''), text:reste }),
       el('p', { class:'h-ligne-cra' }, [ pastilleCra(dj), el('b', { class:'h-cra-res', text:libelleCra(dj) }), el('span', { class:'h-cra-detail', text:'Matin '+fmt.duree(dj.minAm)+' · Après-midi '+fmt.duree(dj.minPm) }) ])
     ]);
     var haut=el('div', { class:'h-carte-jour-haut' }, [ rendreJauge(tot, obj, 'jauge-jour', o, 'jaugeJourTxt'), texte ]);
-    var frise=rendreFrise([{ cle:cle, plages:plagesDe(cle), vivant:vivantDe(cle, ctx), auj:cle===ctx.today }], {
+    var frise=rendreFrise([{ cle:cle, plages:plages, auj:cle===ctx.today }], {
       classe:'jour', anim:o.anim, meme:o.meme, entree:o.entree,
       surClic:function(k, minute, id){
         if(id) ouvrirFeuillePlage(k, id);
@@ -1134,19 +870,18 @@
   }
 
   function cartePlages(cle, ctx, o){
-    var plages=plagesDe(cle), viv=vivantDe(cle, ctx), menu=menuJour(cle);
+    var plages=plagesDe(cle), menu=menuJour(cle);
     var tete=el('div', { class:'h-carte-tete' }, [ el('h2', { class:'h-carte-titre', id:'plagesTitre' }, [ 'Plages', plages.length?el('span', { class:'h-compte', text:String(plages.length) }):null ]), menu ]);
     var ul=el('ul', { class:'h-plages', 'aria-labelledby':'plagesTitre' });
-    if(viv.length && D.chrono) ul.appendChild(ligneEnCours(cle, viv));
     plages.forEach(function(p, i){ ul.appendChild(lignePlage(cle, p, plages[i+1]||null)); });
     var contenu=[ tete ];
     if(estRecup(cle)){
-      var du=Math.round(H.duJour(R(), cle));
+      var du=duDuJour(cle);
       contenu.push(el('p', { class:'h-recup' }, [ el('span', { class:'h-recup-badge' }, [ icone('recup', 14), 'Récupération' ]),
         el('span', { class:'h-recup-txt', text:plages.length?'Jour avec plages : compté normalement.':(du?'− '+fmt.duree(du)+' sur la balance d’heures.':'Jour non ouvré : sans effet sur la balance.') }) ]));
     }
     if(ul.childNodes.length) contenu.push(ul);
-    else if(!estRecup(cle)) contenu.push(el('p', { class:'h-vide-txt', text:(cle>ctx.today)?'Rien de prévu ce jour.':(cle===ctx.today?(R().saisieRapide?'Aucune plage aujourd’hui. Démarrez le chrono, tapez une saisie rapide ou appliquez votre journée type.':'Aucune plage aujourd’hui. Démarrez le chrono, ajoutez une plage ou appliquez votre journée type.'):'Aucune plage ce jour.') }));
+    else if(!estRecup(cle)) contenu.push(el('p', { class:'h-vide-txt', text:(cle>ctx.today)?'Rien de prévu ce jour.':(cle===ctx.today?(R().saisieRapide?'Aucune plage aujourd’hui. Tapez une saisie rapide, ajoutez une plage ou appliquez votre journée type.':'Aucune plage aujourd’hui. Ajoutez une plage ou appliquez votre journée type.'):'Aucune plage ce jour.') }));
     contenu.push(actionsJour(cle, ctx));
     return el('section', { class:'h-carte h-carte-plages', 'aria-labelledby':'plagesTitre' }, contenu);
   }
@@ -1169,26 +904,14 @@
     });
     return el('li', { 'data-flip':'pl-'+p.id }, [ b ]);
   }
-  function ligneEnCours(cle, viv){
-    var c=D.chrono, dur=H.unionMinutes(viv), depuis=heureRelative(c.t0, cle);
-    var b=el('button', { type:'button', class:'h-ligne en-cours', 'data-focus':'encours', 'aria-haspopup':'dialog', 'aria-controls':'feuilleChrono',
-      'aria-label':'En cours depuis '+depuis+', '+fmt.dureeLongue(dur)+(c.p?', '+nomProjet(c.p):'')+'. Détails du chrono' }, [
-      el('span', { class:'h-l-heures' }, [ el('span', { class:'h-l-pulse', 'aria-hidden':'true' }), el('span', { text:'En cours depuis '+depuis }) ]),
-      el('span', { class:'h-l-duree', text:fmt.duree(dur) }),
-      etiquetteProjet(c.p, 'h-l-projet'),
-      el('span', { class:'h-l-orig', title:'Origine : chrono' }, [ icone('chrono', 15) ])
-    ]);
-    b.addEventListener('click', function(){ ouvrirFeuilleChrono(null, b); });
-    return el('li', { 'data-flip':'encours' }, [ b ]);
-  }
   function actionsJour(cle, ctx){
-    var wrap=el('div', { class:'h-actions-jour' }), jt=journeeType(), vide=!plagesDe(cle).length, ici=vivantDe(cle, ctx).length>0;
-    var c=D.chrono, chronoIci=!!(c && (ici || (c.e==='marche' && T.dates.cle(c.t0)===cle) || (c.e==='pause' && cle===ctx.today)));
-    var primaire=((cle<ctx.today) || !!(c && !chronoIci)) && !estRecup(cle);     // jour de récupération : aucune action mise en avant
+    var wrap=el('div', { class:'h-actions-jour' }), jt=journeeType(), vide=!plagesDe(cle).length;
+    // Une action principale : la journée type sur un jour vide passé ou présent (jour de récupération : aucune).
+    var primaire=(cle<=ctx.today) && !estRecup(cle);
     if(!jt) wrap.appendChild(bouton([ icone('modele', 16), 'Définir ma journée type' ], 'btn', function(){ ouvrirReglages('secJt'); }, { 'data-focus':'jt', 'aria-haspopup':'dialog' }));
-    else if(vide && !ici) wrap.appendChild(bouton([ icone('modele', 16), 'Journée type · '+fmt.duree(dureeJt()) ], 'btn'+(primaire?' primary':''), function(){ appliquerJourneeType(cle, 'vide'); }, { 'data-focus':'jt', 'aria-keyshortcuts':'J' }));
+    else if(vide) wrap.appendChild(bouton([ icone('modele', 16), 'Journée type · '+fmt.duree(dureeJt()) ], 'btn'+(primaire?' primary':''), function(){ appliquerJourneeType(cle, 'vide'); }, { 'data-focus':'jt', 'aria-keyshortcuts':'J' }));
     else wrap.appendChild(bouton([ icone('modele', 16), 'Compléter avec la journée type' ], 'btn', function(){ appliquerJourneeType(cle, 'completer'); }, { 'data-focus':'jt', 'aria-keyshortcuts':'J' }));
-    wrap.appendChild(bouton([ icone('plus', 16), 'Plage' ], 'btn'+((vide && !ici && !jt && cle<=ctx.today && !estRecup(cle))?' primary':''), function(e){ ouvrirFeuillePlage(cle, null, null, e.currentTarget); },
+    wrap.appendChild(bouton([ icone('plus', 16), 'Plage' ], 'btn'+((vide && !jt && cle<=ctx.today && !estRecup(cle))?' primary':''), function(e){ ouvrirFeuillePlage(cle, null, null, e.currentTarget); },
       { 'data-focus':'ajout', 'aria-keyshortcuts':'N', 'aria-label':'Ajouter une plage', 'aria-haspopup':'dialog' }));
     return wrap;
   }
@@ -1259,19 +982,18 @@
         var o=clone(e.reglages); o.journeeType=jt;
         e.reglages=H.validerReglages(o, e.projets); e.meta.accueilVu=true;
       });
-      if(res){ ui.accueil=null; ui.focusApres='jt'; T.annoncer('Journée type enregistrée : '+fmt.dureeLongue(dureeJt())); focusSur(pt.hex); }
+      if(res){ ui.accueil=null; ui.focusApres='jt'; T.annoncer('Journée type enregistrée : '+fmt.dureeLongue(dureeJt())); focusSur(trouverFocus($('vue'), 'jt')||$('vueTitre')); }
     }, { 'data-focus':'acc-ok' });
     var passer=bouton('Passer', 'btn ghost', function(){
       var res=muter('Accueil', function(e){ e.meta.accueilVu=true; }, { pile:false });
-      if(res){ ui.accueil=null; focusSur(pt.hex); }
+      if(res){ ui.accueil=null; focusSur(trouverFocus($('vue'), 'ajout')||$('vueTitre')); }
     }, { 'data-focus':'acc-passer' });
     return el('section', { class:'h-carte h-accueil', 'aria-labelledby':'accueilTitre' }, [
       el('span', { class:'eyebrow', text:'Bienvenue' }),
       el('h2', { class:'h-accueil-titre', id:'accueilTitre', text:'Votre journée type' }),
       el('p', { class:'h-accueil-txt', text:'Appliquée en un toucher sur les jours où vous n’avez pas pointé. Ajustez-la, elle reste modifiable dans les réglages.' }),
       el('div', { class:'h-acc-lignes' }, lignes), duree, erreur,
-      el('div', { class:'h-acc-actions' }, [ ok, passer ]),
-      el('p', { class:'h-accueil-indice' }, [ el('span', { class:'h-indice-hex', 'aria-hidden':'true' }), 'Touchez l’hexagone pour démarrer le chrono.' ])
+      el('div', { class:'h-acc-actions' }, [ ok, passer ])
     ]);
   }
 
@@ -1284,7 +1006,7 @@
   }
   function joursVidesSemaine(lundi, ctx){
     var l=[];
-    for(var i=0;i<7;i++){ var k=T.dates.ajouterJours(lundi, i); if(ouvre(k) && k<=ctx.today && !plagesDe(k).length && !vivantDe(k, ctx).length) l.push(k); }
+    for(var i=0;i<7;i++){ var k=T.dates.ajouterJours(lundi, i); if(ouvre(k) && k<=ctx.today && !plagesDe(k).length) l.push(k); }
     return l;
   }
   function construireSemaine(ctx, o){
@@ -1294,8 +1016,8 @@
       prec:'Semaine précédente', suiv:'Semaine suivante', retour:'Cette semaine', retourVisible:!contient }));
     var jours=[], tot=0, cra=0, pointes=0;
     for(var i=0;i<7;i++){
-      var k=T.dates.ajouterJours(lundi, i), pl=plagesAvecVivant(k, ctx), t=H.unionMinutes(pl), dj=H.demiJournees(pl, R());
-      jours.push({ cle:k, plages:plagesDe(k), vivant:vivantDe(k, ctx), total:t, dj:dj });
+      var k=T.dates.ajouterJours(lundi, i), pl=plagesDe(k), t=H.unionMinutes(pl), dj=H.demiJournees(pl, R());
+      jours.push({ cle:k, plages:pl, total:t, dj:dj });
       tot+=t; cra+=(dj.am?0.5:0)+(dj.pm?0.5:0); if(t) pointes++;
     }
     var obj=R().objHebdoMin, revolue=dim<ctx.today;
@@ -1308,7 +1030,7 @@
     var tuiles=el('dl', { class:'h-tuiles-sem' }, [
       tuileStat('Semaine', fmt.duree(tot)+(obj?' / '+fmt.duree(obj):''), 'principale'),
       tuileStat(reste.l, reste.v, (obj && tot>=obj)?'atteint':''),
-      contient?tuileStat('Aujourd’hui', fmt.duree(totalJour(ctx.today, ctx))):tuileStat('Jours pointés', String(pointes)),
+      contient?tuileStat('Aujourd’hui', fmt.duree(totalJour(ctx.today))):tuileStat('Jours pointés', String(pointes)),
       tuileStat('Équivalent CRA', fmt.jours(cra))
     ]);
     var texteJauge=el('p', { class:'h-jauge-centre', id:'jaugeSemTxt' }, [ el('b', { text:fmt.duree(tot) }), el('span', { text:obj?'sur '+fmt.duree(obj):'cette semaine' }) ]);
@@ -1331,7 +1053,7 @@
     var rangees=jours.slice(), sam=jours[5], dimJ=jours[6];
     var replie=!ui.deplies[lundi] && !ouvre(sam.cle) && !ouvre(dimJ.cle) && !sam.total && !dimJ.total;
     if(replie) rangees=jours.slice(0, 5);
-    var frise=rendreFrise(rangees.map(function(j){ return { cle:j.cle, plages:j.plages, vivant:j.vivant, auj:j.cle===ctx.today, j:j }; }), {
+    var frise=rendreFrise(rangees.map(function(j){ return { cle:j.cle, plages:j.plages, auj:j.cle===ctx.today, j:j }; }), {
       classe:'semaine'+(vide?' fantome':''), anim:o.anim, meme:o.meme, entree:o.entree,
       lignes:function(r, piste){
         var j=r.j, nom=T.dates.enTetesSemaine('court')[isoJour(j.cle)-1]+' '+(+j.cle.slice(8));
@@ -1352,7 +1074,7 @@
     }
     var carteFrise=el('section', { class:'h-carte h-carte-frise-sem', 'aria-labelledby':'friseSemTitre' }, [
       el('div', { class:'h-carte-tete' }, [ el('h2', { class:'h-carte-titre', id:'friseSemTitre', text:'Jour par jour' }) ]) ]);
-    if(vide) carteFrise.appendChild(el('p', { class:'h-vide-txt', text:'Aucune heure cette semaine. Démarrez le chrono ou appliquez votre journée type.' }));
+    if(vide) carteFrise.appendChild(el('p', { class:'h-vide-txt', text:'Aucune heure cette semaine. Ajoutez une plage ou appliquez votre journée type.' }));
     carteFrise.appendChild(frise);
     f.appendChild(carteFrise);
 
@@ -1374,13 +1096,8 @@
         tableau. Nombres CRA : TAF.heures.resumeMois / demiJournees
         (règle unique, mêmes nombres que le CRA et le CSV).
   ============================================================ */
-  // Résumé du mois, segment vivant compris (lecture : rien n'est écrit).
-  function resumeAvecVivant(a, m0, ctx){
-    var jours=Object.create(null);
-    Object.keys(D.jours).forEach(function(k){ jours[k]=D.jours[k]; });
-    Object.keys(ctx.vivants).forEach(function(k){ if(T.dates.cleValide(k)) jours[k]=plagesAvecVivant(k, ctx); });
-    return H.resumeMois({ jours:jours, reglages:D.reglages, projets:D.projets }, a, m0);
-  }
+  // Résumé du mois (règle unique TAF.heures.resumeMois ; lecture : rien n'est écrit).
+  function resumeDuMois(a, m0){ return H.resumeMois(D, a, m0); }
   // Pourcentages entiers dont la somme vaut 100 (méthode du plus fort reste).
   function pourcentages(valeurs){
     var tot=valeurs.reduce(function(s, v){ return s+v; }, 0);
@@ -1394,7 +1111,7 @@
     var d=T.dates.depuisCle(ui.ref), a=d.getFullYear(), m0=d.getMonth(), prefixe=ui.ref.slice(0, 7);
     var f=doc.createDocumentFragment(), courant=(prefixe===ctx.today.slice(0, 7));
     f.appendChild(enTete({ sur:courant?'Ce mois':String(a), titre:T.MOIS[m0]+' '+a, prec:'Mois précédent', suiv:'Mois suivant', retour:'Ce mois', retourVisible:!courant }));
-    var resume=resumeAvecVivant(a, m0, ctx), nums=Object.keys(resume).map(Number).sort(function(x, y){ return x-y; });
+    var resume=resumeDuMois(a, m0), nums=Object.keys(resume).map(Number).sort(function(x, y){ return x-y; });
     var total=0, cra=0;
     nums.forEach(function(n){ total+=resume[n].min; cra+=(resume[n].am?0.5:0)+(resume[n].pm?0.5:0); });
 
@@ -1505,11 +1222,11 @@
     return el('div', { class:'h-table-zone', tabindex:'0', role:'region', 'aria-label':'Tableau du mois (défilement horizontal possible)' }, [ table ]);
   }
   function repartitionProjets(prefixe, ctx, o){
-    // Jours du mois (stockés + segment vivant), chacun compté une fois ; « Sans projet » inclus.
+    // Jours du mois, chacun compté une fois ; « Sans projet » inclus.
     var cles=Object.create(null), parId=Object.create(null), ordre=[];
-    Object.keys(D.jours).concat(Object.keys(ctx.vivants)).forEach(function(k){ if(k.indexOf(prefixe)===0) cles[k]=true; });
+    Object.keys(D.jours).forEach(function(k){ if(k.indexOf(prefixe)===0) cles[k]=true; });
     Object.keys(cles).sort().forEach(function(k){
-      plagesAvecVivant(k, ctx).forEach(function(p){
+      plagesDe(k).forEach(function(p){
         var id=p.p||'';
         if(!(id in parId)){ parId[id]=0; ordre.push(id); }
         parId[id]+=minutes(p.f)-minutes(p.d);
@@ -1547,7 +1264,7 @@
   function rendreFocusApres(cle, repli){
     var a=doc.activeElement;
     if(a && a!==doc.body && doc.contains(a) && !a.closest('[aria-hidden="true"]')) return;
-    focusSur((cle && (trouverFocus($('vue'), cle)||trouverFocus($('pointeuse'), cle)))||repli||$('vueTitre'));
+    focusSur((cle && (trouverFocus($('vue'), cle)||trouverFocus($('gauche'), cle)))||repli||$('vueTitre'));
   }
 
   var fp={ ouvert:false, cle:'', id:null, o:'s', s:null, p:'', relacher:null, cleRetour:null, nouveau:false, pauseAutre:false, pauseDebutManuel:false };
@@ -1555,7 +1272,7 @@
     pauseBloc:$('plagePauseBloc'), pausePuces:$('plagePausePuces'), pauseDej:$('plagePauseDej'), pauseChamps:$('plagePauseChamps'), pause:$('plagePause'), pauseDebut:$('plagePauseDebut'), pauseNote:$('plagePauseNote'),
     detail:$('plageDetail'), debut:$('plageDebut'), fin:$('plageFin'), minuit:$('plageMinuit'), lendemain:$('plageLendemain'), lendemainBloc:$('plageLendemainBloc'),
     maintenant:$('plageMaintenant'), demi:$('plageDemi'), duree:$('plageDuree'), chevauche:$('plageChevauche'), erreur:$('plageErreur'), puces:$('plageProjetsPuces'),
-    note:$('plageNote'), compte:$('plageNoteCompte'), supprimer:$('plageSupprimer'), reprendre:$('plageReprendre'), enregistrer:$('plageEnregistrer') };
+    note:$('plageNote'), compte:$('plageNoteCompte'), supprimer:$('plageSupprimer'), enregistrer:$('plageEnregistrer') };
 
   // §6.10 — début = fin de la dernière plage, sinon journée type, sinon début habituel ;
   // fin = maintenant arrondi au quart d'heure (jour courant), sinon début + 1 h.
@@ -1572,7 +1289,6 @@
     if(!T.dates.cleValide(cle)) cle=aujourdHui();
     var plage=null;
     if(id){ plage=plagesDe(cle).filter(function(x){ return x.id===id; })[0]||null; if(!plage){ T.toast({ message:'Plage introuvable (modifiée ailleurs ?).', type:'erreur' }); return; } }
-    if(fc.ouvert) fermerFeuilleChrono(false);
     if(ex.ouvert) fermerExport(false);
     fp.cle=cle; fp.id=plage?plage.id:null; fp.o=plage?plage.o:'s'; fp.s=(plage && plage.s)||null; fp.nouveau=!plage;
     fp.origine=plage?JSON.stringify(plage):null;
@@ -1589,7 +1305,7 @@
     FP.rapide.value='';
     // Saisie rapide : masquée (hidden, hors tabulation) si le réglage est désactivé (défaut).
     FP.rapideBloc.hidden=!!plage || !R().saisieRapide;
-    FP.supprimer.hidden=!plage; FP.reprendre.hidden=!plage;
+    FP.supprimer.hidden=!plage;
     FP.maintenant.hidden=(cle!==aujourdHui());
     FP.erreur.hidden=true;
     fp.pauseAutre=false; fp.pauseDebutManuel=false; FP.pause.value='0'; FP.pauseDebut.value='';
@@ -1761,6 +1477,7 @@
       });
     });
     if(!r) return;
+    demanderPersistance();
     fermerFeuillePlage();
     toastAnnulable((id?'Plage modifiée':(c.pause?'2 plages ajoutées':'Plage ajoutée'))+' · '+fmt.duree(c.duree)+(c.pause?' (pause '+fmt.duree(c.pause.min)+')':'')+suffixeRognees(rognees), r.entree);
   }
@@ -1778,30 +1495,6 @@
     if(anim) li.animate([{ opacity:1, transform:'none' },{ opacity:0, transform:'translateX(-12px)' }], { duration:180, easing:EASE, fill:'forwards' });
     ui.focusApres=(focusApres && trouverFocus($('vue'), focusApres))?focusApres:'ajout';
     toastAnnulable('Plage supprimée · '+plage.d+'–'+plage.f, r.entree, 'info');
-  }
-  // « Reprendre ▶ » : relance le chrono avec le projet et la note de la plage (un chrono actif est
-  // d'abord arrêté : une seule mutation, un seul toast « Chrono basculé · Annuler »).
-  function reprendrePlage(cle, id){
-    var plage=plagesDe(cle).filter(function(x){ return x.id===id; })[0];
-    if(!plage) return;
-    var now=maintenant(), avait=!!D.chrono;
-    // Chrono en marche depuis plus de 24 h : même garde que pause / arrêt (jamais de segment jeté en silence).
-    if(D.chrono && D.chrono.e==='marche' && now-D.chrono.t0>J24){ demanderConfirmation24('arreter'); return null; }
-    var r=muter(avait?'Chrono basculé':'Reprendre la plage', function(e){
-      if(e.chrono){
-        if(e.chrono.e==='marche' && now-e.chrono.t0<=J24){ var seg=enregistrerSegment(e, now); if(seg.erreur) return false; }
-        e.chrono=null;
-      }
-      var p=projetActif(plage.p)?plage.p:'';
-      e.chrono={ e:'marche', t0:arrondiSeconde(now), tp:null, p:p, n:plage.n||'', s:T.id('s') };
-    });
-    if(!r) return null;
-    demanderPersistance(); vibrer(); animerHex();
-    fermerFeuillePlage(false);
-    focusSur(pt.hex);
-    if(avait) toastAnnulable('Chrono basculé · '+nomProjet(D.chrono.p), r.entree);
-    else T.annoncer('Chrono démarré à '+heureParlee(now)+(D.chrono.p?', projet '+nomProjet(D.chrono.p):''));
-    return r;
   }
   // Tuiles horaires : ±5 min (Maj ou appui long : ±15) ; ↑ / ↓ dans le champ.
   function pasHoraire(champ, delta){
@@ -1863,13 +1556,12 @@
       fermerFeuillePlage(false);
       supprimerPlage(cle, id, suivante?'pl-'+suivante.id:'ajout');
     });
-    FP.reprendre.addEventListener('click', function(){ reprendrePlage(fp.cle, fp.id); });
     $('plageFermer').addEventListener('click', function(){ fermerFeuillePlage(); });
     FP.voile.addEventListener('click', function(){ fermerFeuillePlage(); });
     T.glisserPourFermer($('plagePoignee'), FP.feuille, function(){ fermerFeuillePlage(); });
   }
 
-  /* Choix du projet (feuilles Plage et Chrono) : puces des projets récents, « Sans projet »,
+  /* Choix du projet (feuille Plage) : puces des projets récents, « Sans projet »,
      liste complète, « + Nouveau ». État : aria-pressed + coche (forme), nom toujours visible. */
   function construireChoixProjet(conteneur, valeur, surChoix){
     T.vider(conteneur);
@@ -1901,224 +1593,6 @@
   }
 
   /* ============================================================
-     11. FEUILLE CHRONO — une seule surface : affichage, segments de
-         la session (pauses visibles), début, projet, note, Démarrer
-         à… / Arrêter à…, confirmation intégrée (> 24 h).
-  ============================================================ */
-  var fc={ ouvert:false, relacher:null, section:null, pRepos:null, nRepos:'', changement:null, confirm:null, recap:null, cleRetour:null, sig:'', autreDebut:false, autreFin:false };
-  var FC={ feuille:$('feuilleChrono'), voile:$('chronoVoile'), titre:$('chronoTitre'), corps:$('chronoCorps'), pied:$('chronoPied') };
-  var CIBLES_SECTION={ demarrerA:['fc-dem-0'], arreterA:['fc-arr-0','fc-arr-autre'], debut:['fc-debut'], projet:['fc-projet'], confirm:['fc-confirm'] };
-  function cibleSection(section){
-    var l=CIBLES_SECTION[section]||[];
-    for(var i=0;i<l.length;i++){ var n=trouverFocus(FC.feuille, l[i]); if(n) return n; }
-    return FC.titre;
-  }
-
-  function ouvrirFeuilleChrono(section, declencheur){
-    if(fp.ouvert) fermerFeuillePlage(false);
-    if(ex.ouvert) fermerExport(false);
-    fc.section=section||null; fc.changement=null; fc.autreDebut=false; fc.autreFin=false;
-    if(section!=='confirm') fc.confirm=null;
-    if(fc.pRepos===null) fc.pRepos=(R().projetDemarrage==='dernier')?dernierProjetChrono():'';
-    fc.sig='';
-    rendreFeuilleChrono(contexte(maintenant()));
-    var cible=cibleSection(section);
-    if(!fc.ouvert){
-      fc.cleRetour=(declencheur && declencheur.getAttribute)?declencheur.getAttribute('data-focus'):null;
-      fc.ouvert=true;
-      ouvrirSurface(FC.feuille, FC.voile);
-      fc.relacher=T.gererModale(FC.feuille, declencheur||null, cible, fermerFeuilleChrono);
-    } else focusSur(cible);
-    if(section && cible && cible.scrollIntoView) setTimeout(function(){ try{ cible.scrollIntoView({ block:'nearest' }); }catch(e){} }, 80);
-  }
-  function fermerFeuilleChrono(rendreFocus){
-    if(!fc.ouvert) return;
-    viderNote();
-    fc.ouvert=false; fc.confirm=null; fc.changement=null; fc.recap=null;
-    fermerSurface(FC.feuille, FC.voile);
-    if(fc.relacher){ fc.relacher(rendreFocus!==false); fc.relacher=null; }
-    if(rendreFocus!==false) rendreFocusApres(fc.cleRetour, pt.hex);
-  }
-  function sectionChrono(titre, contenu, attrs){
-    return el('section', Object.assign({ class:'fc-section' }, attrs||{}), [ el('h3', { class:'h-label', text:titre }) ].concat(contenu));
-  }
-  function rendreFeuilleChrono(ctx){
-    var c=D.chrono, etat=etatChrono();
-    var sig=[etat, c?c.s:'', c?c.t0:'', c?c.tp:'', c?c.p:fc.pRepos, JSON.stringify(D.projets), JSON.stringify(fc.confirm), fc.changement||'', fc.autreDebut, fc.autreFin].join('|');
-    if(sig===fc.sig){ majRecapChrono(ctx); majSegmentsChrono(ctx); return; }
-    fc.sig=sig;
-    var focus=cleFocus(FC.feuille);
-    T.vider(FC.corps); T.vider(FC.pied);
-    FC.titre.textContent=(etat==='marche')?'Chrono en marche':(etat==='pause'?'Chrono en pause':'Chrono');
-
-    // Récapitulatif NON défilant (mis à jour à la minute) : session en cours, sinon total du jour
-    fc.recap=el('b', { class:'fc-recap-val' });
-    FC.corps.appendChild(el('div', { class:'fc-affichage', 'data-etat':etat }, [
-      el('p', { class:'fc-recap' }, [ el('span', { class:'fc-recap-lib', text:c?'Session':'Aujourd’hui' }), fc.recap ]),
-      el('p', { class:'fc-sous', text:(function(le){ return le.mot+le.suite; })(ligneEtat(c, ctx))+((c && c.p)?' · '+nomProjet(c.p):'') })
-    ]));
-    majRecapChrono(ctx);
-    if(c && c.e==='marche' && ctx.now<c.t0) FC.corps.appendChild(el('p', { class:'h-avertissement', role:'alert' }, [ icone('alerte', 16), el('span', { text:'L’horloge de l’appareil a reculé : la durée affichée vaut 0.' }) ]));
-
-    // Confirmation intégrée : session de plus de 24 h
-    if(fc.confirm && c && c.e==='marche'){
-      var finC=(fc.confirm.fin!=null)?fc.confirm.fin:ctx.now, dureeC=Math.floor((finC-c.t0)/60000), act=fc.confirm.action;
-      FC.corps.appendChild(el('div', { class:'fc-confirm', role:'alertdialog', 'aria-labelledby':'fcConfirmTxt' }, [
-        el('p', { id:'fcConfirmTxt', text:'Cette session dure '+fmt.duree(dureeC)+'. L’enregistrer telle quelle ?' }),
-        el('p', { class:'h-aide', text:'Découpe : '+apercuDecoupe(c.t0, finC) }),
-        el('div', { class:'fc-confirm-actions' }, [
-          bouton('Enregistrer '+fmt.duree(dureeC), 'btn primary', function(){ fc.confirm=null; var r=(act==='pause')?pauseChrono({ confirme:true }):arreterChrono(finC, { confirme:true }); if(r) fermerFeuilleChrono(); }, { 'data-focus':'fc-confirm' }),
-          bouton('Choisir l’heure d’arrêt', 'btn', function(){ fc.confirm=null; fc.autreFin=true; fc.sig=''; ui.focusApres=null; rendreFeuilleChrono(contexte(maintenant())); focusSur(trouverFocus(FC.feuille, 'fc-arr-date')); }),
-          bouton('Annuler', 'btn ghost', function(){ fc.confirm=null; fc.sig=''; rendreFeuilleChrono(contexte(maintenant())); focusSur(FC.titre); })
-        ])
-      ]));
-    }
-
-    // Segments de la session (pauses visibles)
-    if(c){ var seg=el('div', { class:'fc-segments-zone' }); FC.corps.appendChild(sectionChrono('Segments de la session', [ seg ])); fc.segments=seg; majSegmentsChrono(ctx); }
-    else fc.segments=null;
-
-    // Début (en marche) : ±5 min ou heure précise, dans [maintenant − 24 h, maintenant]
-    if(etat==='marche'){
-      var champDebut=el('input', { class:'taf-input h-heure', type:'time', step:'60', id:'fcDebut', value:heureDe(c.t0), 'data-focus':'fc-debut' });
-      champDebut.addEventListener('change', function(){
-        var m=minutes(champDebut.value); if(!isFinite(m)) return;
-        var base=new Date(D.chrono.t0), cand=new Date(base.getFullYear(), base.getMonth(), base.getDate(), Math.floor(m/60), m%60).getTime();
-        if(cand>maintenant()) cand-=J24;
-        corrigerDebut(cand);
-      });
-      champDebut.addEventListener('keydown', function(e){
-        if((e.key==='ArrowUp' || e.key==='ArrowDown') && !e.altKey && !e.ctrlKey && !e.metaKey){ e.preventDefault(); corrigerDebut(D.chrono.t0+(e.key==='ArrowUp'?1:-1)*(e.shiftKey?15:5)*60000); }
-      });
-      FC.corps.appendChild(sectionChrono('Début', [ el('div', { class:'h-tuile-ligne fc-debut' }, [
-        bouton('−5', 'h-pas', function(e){ corrigerDebut(D.chrono.t0-(e.shiftKey?15:5)*60000); }, { 'aria-label':'Début : moins 5 minutes (Maj : 15)', 'data-focus':'fc-debut-m' }),
-        el('label', { class:'sr-only', for:'fcDebut', text:'Heure de début' }), champDebut,
-        bouton('+5', 'h-pas', function(e){ corrigerDebut(D.chrono.t0+(e.shiftKey?15:5)*60000); }, { 'aria-label':'Début : plus 5 minutes (Maj : 15)', 'data-focus':'fc-debut-p' })
-      ]), el('p', { class:'h-aide', text:'Un chevauchement éventuel est résolu à l’enregistrement du segment (la plus récente gagne).' }) ]));
-    }
-
-    // Projet
-    var valeurP=c?c.p:fc.pRepos, zoneP=el('div', { class:'h-puces' });
-    construireChoixProjet(zoneP, valeurP, function(id){
-      if(!D.chrono){ fc.pRepos=id; fc.sig=''; rendreFeuilleChrono(contexte(maintenant())); focusPuce(id); return; }
-      if(id===D.chrono.p) return;
-      if(D.chrono.e==='marche'){ fc.changement=id; fc.sig=''; rendreFeuilleChrono(contexte(maintenant())); focusSur(trouverFocus(FC.feuille, 'fc-chg-maintenant')); return; }
-      changerProjetChrono(id, 'pause'); focusPuce(id);
-    });
-    var blocP=[ zoneP ];
-    if(fc.changement!=null && c && c.e==='marche'){
-      var cible=fc.changement;
-      blocP.push(el('div', { class:'fc-changement', role:'group', 'aria-label':'Changer de projet' }, [
-        el('p', { text:'Passer à « '+nomProjet(cible)+' » :' }),
-        bouton('À partir de maintenant', 'btn small primary', function(){ fc.changement=null; changerProjetChrono(cible, 'maintenant'); focusPuce(cible); }, { 'data-focus':'fc-chg-maintenant' }),
-        bouton('Pour toute la session', 'btn small', function(){ fc.changement=null; changerProjetChrono(cible, 'session'); focusPuce(cible); }),
-        bouton('Annuler', 'btn small ghost', function(){ fc.changement=null; fc.sig=''; rendreFeuilleChrono(contexte(maintenant())); focusPuce(D.chrono.p); })
-      ]));
-    }
-    var secP=sectionChrono('Projet', blocP, { 'data-focus':null });
-    FC.corps.appendChild(secP);
-    var pp=zoneP.querySelector('[aria-pressed="true"]'); if(pp) pp.setAttribute('data-focus', 'fc-projet');
-
-    // Note
-    var note=el('textarea', { class:'taf-input h-note-champ', id:'fcNote', rows:'2', maxlength:String(LIM.note), placeholder:'Facultatif — ex. revue de code', 'data-focus':'fc-note' });
-    note.value=c?(noteEnAttente!==null?noteEnAttente:c.n):fc.nRepos;
-    note.addEventListener('input', function(){ if(D.chrono) noterChrono(note.value); else fc.nRepos=nettoyer(note.value, LIM.note); });
-    FC.corps.appendChild(sectionChrono('Note', [ el('label', { class:'sr-only', for:'fcNote', text:'Note du chrono' }), note ]));
-
-    // Démarrer à… (repos)
-    if(etat==='repos'){
-      var puces=[], now=ctx.now;
-      [5, 10, 15, 30].forEach(function(n, i){ puces.push(bouton('il y a '+n+' min', 'h-puce', function(){ demarrerDepuisFeuille(now0()-n*60000); }, { 'data-focus':'fc-dem-'+i })); });
-      var jt=journeeType();
-      if(jt){ var dj=minutes(jt[0].d), dd=new Date(now), tj=new Date(dd.getFullYear(), dd.getMonth(), dd.getDate(), Math.floor(dj/60), dj%60).getTime();
-        if(tj<=now && tj>=now-J24) puces.push(bouton('À '+jt[0].d+' (journée type)', 'h-puce', function(){ demarrerDepuisFeuille(tj); }, { 'data-focus':'fc-dem-jt' })); }
-      var autreD=bouton('Autre heure…', 'h-puce', function(){ fc.autreDebut=!fc.autreDebut; fc.sig=''; rendreFeuilleChrono(contexte(maintenant())); focusSur(trouverFocus(FC.feuille, fc.autreDebut?'fc-dem-heure':'fc-dem-autre')); }, { 'aria-expanded':String(fc.autreDebut), 'data-focus':'fc-dem-autre' });
-      puces.push(autreD);
-      var contenuD=[ el('div', { class:'h-puces' }, puces) ];
-      if(fc.autreDebut){
-        var hD=el('input', { class:'taf-input h-heure', type:'time', step:'60', id:'fcDemHeure', value:heureDe(now), 'data-focus':'fc-dem-heure' });
-        contenuD.push(el('div', { class:'fc-autre' }, [ el('label', { class:'h-label', for:'fcDemHeure', text:'Heure de début (aujourd’hui)' }), hD,
-          bouton('Démarrer à cette heure', 'btn small primary', function(){
-            var m=minutes(hD.value); if(!isFinite(m)){ focusSur(hD); return; }
-            var d0=new Date(maintenant()); demarrerDepuisFeuille(new Date(d0.getFullYear(), d0.getMonth(), d0.getDate(), Math.floor(m/60), m%60).getTime());
-          }) ]));
-      }
-      FC.corps.appendChild(sectionChrono('Démarrer à…', contenuD));
-    }
-    // Arrêter à… (marche) : fin dans [t0, maintenant]
-    if(etat==='marche'){
-      var pucesA=[], jtA=journeeType();
-      if(jtA){
-        var fm=minutes(jtA[jtA.length-1].f), dn=new Date(ctx.now), tf=new Date(dn.getFullYear(), dn.getMonth(), dn.getDate(), Math.floor(fm/60), fm%60).getTime();
-        if(fm>=1440) tf=new Date(dn.getFullYear(), dn.getMonth(), dn.getDate()+1).getTime();
-        if(tf>ctx.now) tf-=J24;
-        if(tf>=c.t0 && tf<=ctx.now) pucesA.push(bouton('À '+heureRelative(tf, ctx.today)+' (fin de journée type)', 'h-puce', function(){ if(arreterChrono(tf, { libelle:'Arrêter le chrono' })) fermerFeuilleChrono(); }, { 'data-focus':'fc-arr-0' }));
-      }
-      pucesA.push(bouton('Autre heure…', 'h-puce', function(){ fc.autreFin=!fc.autreFin; fc.sig=''; rendreFeuilleChrono(contexte(maintenant())); focusSur(trouverFocus(FC.feuille, fc.autreFin?'fc-arr-date':'fc-arr-autre')); },
-        { 'aria-expanded':String(fc.autreFin), 'data-focus':'fc-arr-autre' }));
-      var contenuA=[ el('div', { class:'h-puces' }, pucesA) ];
-      if(fc.autreFin){
-        var dA=el('input', { class:'taf-input', type:'date', id:'fcArrDate', value:ctx.today, min:T.dates.cle(c.t0), max:ctx.today, 'data-focus':'fc-arr-date' });
-        var hA=el('input', { class:'taf-input h-heure', type:'time', step:'60', id:'fcArrHeure', value:heureDe(ctx.now) });
-        contenuA.push(el('div', { class:'fc-autre' }, [
-          el('div', { class:'h-champ' }, [ el('label', { class:'h-label', for:'fcArrDate', text:'Date' }), dA ]),
-          el('div', { class:'h-champ' }, [ el('label', { class:'h-label', for:'fcArrHeure', text:'Heure d’arrêt' }), hA ]),
-          bouton('Arrêter à cette heure', 'btn small primary', function(){
-            var dd=T.dates.depuisCle(dA.value), m=minutes(hA.value);
-            if(!dd || !isFinite(m)){ T.toast({ message:'Date ou heure invalide.', type:'erreur' }); return; }
-            var fin=new Date(dd.getFullYear(), dd.getMonth(), dd.getDate(), Math.floor(m/60), m%60).getTime();
-            if(fin>maintenant()){ T.toast({ message:'Cette heure n’est pas encore passée.', type:'erreur' }); return; }
-            if(arreterChrono(fin, { libelle:'Arrêter le chrono' })) fermerFeuilleChrono();
-          })
-        ]));
-      }
-      FC.corps.appendChild(sectionChrono('Arrêter à…', contenuA));
-    }
-
-    // Pied : action principale selon l'état
-    if(etat==='repos') FC.pied.appendChild(bouton([ icone('lecture', 16), 'Démarrer maintenant' ], 'btn primary fc-principal', function(){ demarrerDepuisFeuille(null); }, { 'data-focus':'fc-demarrer' }));
-    else {
-      FC.pied.appendChild(bouton([ icone('stop', 15), 'Arrêter' ], 'btn', function(){ if(arreterChrono()) fermerFeuilleChrono(); }, { 'data-focus':'fc-arreter' }));
-      if(etat==='marche') FC.pied.appendChild(bouton([ icone('pause', 15), 'Pause' ], 'btn primary fc-principal', function(){ if(pauseChrono()) fermerFeuilleChrono(); }, { 'data-focus':'fc-pause' }));
-      else FC.pied.appendChild(bouton([ icone('lecture', 15), 'Reprendre' ], 'btn primary fc-principal', function(){ if(reprendreChrono()) fermerFeuilleChrono(); }, { 'data-focus':'fc-reprendre' }));
-    }
-    if(focus){ var n=trouverFocus(FC.feuille, focus); if(n) focusSur(n); else if(fc.ouvert) focusSur(FC.titre); }
-  }
-  function now0(){ return maintenant(); }
-  function focusPuce(id){ var b=FC.feuille.querySelector('.h-puce-projet[data-p="'+(id||'')+'"]'); if(b) focusSur(b); }
-  function demarrerDepuisFeuille(t0){
-    var r=demarrerChrono(t0, { p:fc.pRepos||'', n:fc.nRepos });
-    if(r){ fc.nRepos=''; fermerFeuilleChrono(); }
-  }
-  function majRecapChrono(ctx){
-    if(!fc.recap) return;
-    var c=D.chrono, v;
-    if(c){ v=minutesSession(c.s); if(c.e==='marche') v+=Math.max(0, Math.floor((ctx.now-c.t0)/60000)); }
-    else v=totalJour(ctx.today, ctx);
-    var t=fmt.duree(v);
-    if(fc.recap.textContent!==t) fc.recap.textContent=t;
-  }
-  function majSegmentsChrono(ctx){
-    var zone=fc.segments, c=D.chrono;
-    if(!zone || !c) return;
-    var segs=plagesSession(c.s), ul=el('ul', { class:'fc-segments' }), prec=null;
-    segs.forEach(function(x){
-      if(prec && prec.cle===x.cle && minutes(x.d)>minutes(prec.f)) ul.appendChild(el('li', { class:'fc-pause' }, [ 'pause '+fmt.duree(minutes(x.d)-minutes(prec.f)) ]));
-      ul.appendChild(el('li', { class:'fc-seg' }, [ el('span', { class:'fc-seg-j', text:fmt.dateCourte(x.cle) }), el('span', { text:x.d+' → '+x.f }), el('b', { text:fmt.duree(minutes(x.f)-minutes(x.d)) }) ]));
-      prec=x;
-    });
-    if(c.e==='marche'){
-      var dur=Math.max(0, Math.floor((ctx.now-c.t0)/60000));
-      if(prec && T.dates.cle(c.t0)===prec.cle){ var gap=minutesMurales(c.t0)-minutes(prec.f); if(gap>0) ul.appendChild(el('li', { class:'fc-pause' }, [ 'pause '+fmt.duree(gap) ])); }
-      ul.appendChild(el('li', { class:'fc-seg vivant' }, [ el('span', { class:'fc-seg-j', text:fmt.dateCourte(T.dates.cle(c.t0)) }), el('span', { text:heureDe(c.t0)+' → maintenant' }), el('b', { text:fmt.duree(dur) }) ]));
-    } else if(c.e==='pause'){
-      ul.appendChild(el('li', { class:'fc-pause en-cours' }, [ 'en pause depuis '+heureRelative(c.tp, ctx.today)+' · '+fmt.duree(Math.max(0, Math.floor((ctx.now-c.tp)/60000))) ]));
-    }
-    if(!ul.childNodes.length) ul.appendChild(el('li', { class:'fc-vide', text:'Aucun segment enregistré pour l’instant.' }));
-    T.vider(zone); zone.appendChild(ul);
-  }
-
-  /* ============================================================
      12. PROJETS, JOURNÉE TYPE, SAISIE RAPIDE
   ============================================================ */
   function nomProjetValide(nom, idExclu){
@@ -2146,7 +1620,6 @@
   function referencesProjet(id){
     var n=0;
     Object.keys(D.jours).forEach(function(k){ D.jours[k].forEach(function(x){ if(x.p===id) n++; }); });
-    if(D.chrono && D.chrono.p===id) n++;
     (journeeType()||[]).forEach(function(x){ if(x.p===id) n++; });
     return n;
   }
@@ -2175,7 +1648,7 @@
   function appliquerJourneeType(cle, mode){
     var jt=journeeType();
     if(!jt){ ouvrirReglages('secJt'); return null; }
-    var ctx=contexte(maintenant()), existants=plagesAvecVivant(cle, ctx);
+    var existants=plagesDe(cle);
     var aAjouter=jt.filter(function(x){ return !existants.some(function(e){ return minutes(e.d)<minutes(x.f) && minutes(x.d)<minutes(e.f); }); });
     if(!aAjouter.length){ T.toast({ message:'Rien à compléter', type:'info' }); return null; }
     var tot=aAjouter.reduce(function(t, x){ return t+minutes(x.f)-minutes(x.d); }, 0);
@@ -2217,8 +1690,8 @@
       e.recup=l;
     });
     if(!r || r.inchange){ ui.focusApres=null; return; }
-    // Effet annoncé = écart RÉEL de balance avant / après (règle unique TAF.heures.balance,
-    // segment du chrono en cours compris) : jamais une seconde estimation qui pourrait diverger.
+    // Effet annoncé = écart RÉEL de balance avant / après (règle unique TAF.heures.balance) :
+    // jamais une seconde estimation qui pourrait diverger.
     memoBalance.D=null;
     var ecart=balanceCourante(contexte(maintenant())).min-b0;
     var effet=ecart?' · '+(ecart>0?'+ ':'− ')+fmt.duree(Math.abs(ecart))+' sur la balance':'';
@@ -2281,6 +1754,7 @@
       });
     });
     if(!r) return null;
+    demanderPersistance();
     toastAnnulable((nb>1?nb+' plages ajoutées':'Plage ajoutée')+' · '+fmt.duree(total)+suffixeRognees(rognees), r.entree);
     return r;
   }
@@ -2323,7 +1797,7 @@
     majVisibiliteSaisieRapide();
     var cle=cibleJour(), jt=journeeType(), b=$('jtGauche');
     $('rapideGLib').textContent='Saisie rapide · '+(cle===ctx.today?'aujourd’hui':fmt.dateCourte(cle));
-    var lib=!jt?'Définir ma journée type':(plagesAvecVivant(cle, ctx).length?'Compléter avec la journée type':'Journée type · '+fmt.duree(dureeJt()));
+    var lib=!jt?'Définir ma journée type':(plagesDe(cle).length?'Compléter avec la journée type':'Journée type · '+fmt.duree(dureeJt()));
     var sig=lib+'|'+cle;
     if(b.getAttribute('data-sig')!==sig){
       b.setAttribute('data-sig', sig); T.vider(b);
@@ -2340,7 +1814,7 @@
   ============================================================ */
   var RG={ obj:$('rObjHebdo'), duree:$('rDureeJour'), jours:$('rJours'), debut:$('rDebut'), pause:$('rPause'), coupure:$('rCoupure'),
     seuilAuto:$('rSeuilAuto'), seuilAutoTxt:$('rSeuilAutoTxt'), seuil:$('rSeuil'), seuilBloc:$('rSeuilBloc'), rattrapage:$('rRattrapage'), exemple:$('rExemple'),
-    arrondi:$('rArrondi'), alerte:$('rAlerte'), projetDem:$('rProjetDemarrage'), saisieRapide:$('rSaisieRapide'), balanceAide:$('rBalanceAide'), balanceDepuis:$('rBalanceDepuis'), balanceZero:$('rBalanceZero'), vibration:$('rVibration'), auto:$('rAuto'),
+    arrondi:$('rArrondi'), saisieRapide:$('rSaisieRapide'), balanceAide:$('rBalanceAide'), balanceDepuis:$('rBalanceDepuis'), balanceZero:$('rBalanceZero'),
     raccourcis:$('rRaccourcis'), rappel:$('rRappel'), jtListe:$('rJtListe'), jtErreur:$('rJtErreur'), projets:$('rProjets'), projetsVide:$('rProjetsVide'),
     projetNom:$('rProjetNom'), projetErreur:$('rProjetErreur'), persistEtat:$('rPersistEtat'), persist:$('rPersist'), import:$('rImport'), fichier:$('rFichier') };
   var jtEdition=null, sigProjets='';
@@ -2398,8 +1872,6 @@
     RG.rattrapage.addEventListener('change', function(){ appliquerReglage('rattrapage', RG.rattrapage.checked); });
     RG.arrondi.addEventListener('change', function(){ appliquerReglage('arrondiMin', +RG.arrondi.value); });
     Array.prototype.forEach.call(doc.querySelectorAll('input[name="rMode"]'), function(r){ r.addEventListener('change', function(){ if(r.checked) appliquerReglage('modeArrondi', r.value); }); });
-    RG.alerte.addEventListener('change', function(){ appliquerReglage('alerteOubliMin', heuresVersMinutes(RG.alerte, 0), RG.alerte, 'Entre 2 et 24 heures.'); });
-    RG.projetDem.addEventListener('change', function(){ appliquerReglage('projetDemarrage', RG.projetDem.value); });
     RG.saisieRapide.addEventListener('change', function(){ appliquerReglage('saisieRapide', RG.saisieRapide.checked); });
     RG.balanceDepuis.addEventListener('change', function(){ var v=RG.balanceDepuis.value; appliquerReglage('balanceDepuis', v===''?null:v, RG.balanceDepuis, 'Date invalide (entre 2000 et 2100).'); });
     RG.balanceZero.addEventListener('click', function(){
@@ -2407,8 +1879,6 @@
       var r=muter('Remettre la balance à zéro', function(e){ var x=clone(e.reglages); x.balanceDepuis=auj; e.reglages=H.validerReglages(x, e.projets); });
       if(r && !r.inchange){ erreurChamp(RG.balanceDepuis, null); majReglagesUI(); toastAnnulable('Balance comptée depuis aujourd’hui ('+fmt.dateFr(auj)+')', r.entree, 'info'); }
     });
-    RG.vibration.addEventListener('change', function(){ appliquerReglage('vibration', RG.vibration.checked); });
-    RG.auto.addEventListener('change', function(){ appliquerReglage('autoPointer', RG.auto.checked); });
     RG.raccourcis.addEventListener('change', function(){ appliquerReglage('raccourcis', RG.raccourcis.checked); });
     RG.rappel.addEventListener('change', function(){ appliquerReglage('rappelSauvegardeJours', +RG.rappel.value); });
 
@@ -2464,8 +1934,7 @@
     RG.seuilAutoTxt.textContent='Automatique (¼ de la journée : '+fmt.duree(seuilAuto)+')';
     RG.rattrapage.checked=r.rattrapage; RG.arrondi.value=String(r.arrondiMin);
     Array.prototype.forEach.call(doc.querySelectorAll('input[name="rMode"]'), function(x){ x.checked=x.value===r.modeArrondi; });
-    valeurSiLibre(RG.alerte, fmtHeures(r.alerteOubliMin)); RG.projetDem.value=r.projetDemarrage;
-    RG.saisieRapide.checked=r.saisieRapide; RG.balanceAide.textContent='Balance d’heures (chrono) : '+aideBalance(); valeurSiLibre(RG.balanceDepuis, r.balanceDepuis||''); RG.vibration.checked=r.vibration; RG.auto.checked=r.autoPointer; RG.raccourcis.checked=r.raccourcis;
+    RG.saisieRapide.checked=r.saisieRapide; RG.balanceAide.textContent=aideBalance(); valeurSiLibre(RG.balanceDepuis, r.balanceDepuis||''); RG.raccourcis.checked=r.raccourcis;
     RG.rappel.value=String(r.rappelSauvegardeJours);
     majExemple();
     if(jtEdition===null) majJtEditeur();
@@ -2559,7 +2028,6 @@
   }
   function ouvrirReglages(section, declencheur){
     if(fp.ouvert) fermerFeuillePlage(false);
-    if(fc.ouvert) fermerFeuilleChrono(false);
     if(ex.ouvert) fermerExport(false);
     jtEdition=null;
     majReglagesUI(true);
@@ -2575,13 +2043,11 @@
     dernierTexte=null; D=donneesNeuves(); statut='vide'; lectureSeule=false; brutOrigine=null; partiel=null; details=[]; ignores=0;
     viderPiles(); ui.accueil=null; jtEdition=null; sigProjets='';
     T.temoin.etat('', CLE);
-    T.nav.rafraichir();
     rendre({ anim:true, entree:true });
     majReglagesUI();
   }
   function reinitialiser(){ reinitialisationCommune(); T.toast({ message:'Données Heures réinitialisées', type:'info' }); focusSur($('vueTitre')); }
   function effacerDonnees(){
-    if(fc.ouvert) fermerFeuilleChrono(false);
     reinitialisationCommune();
     T.toast({ message:'Données Heures effacées (CRA et apparence intacts)', type:'info' });
   }
@@ -2596,7 +2062,6 @@
   function cocher(nom, valeur){ Array.prototype.forEach.call(doc.querySelectorAll('input[name="'+nom+'"]'), function(r){ r.checked=r.value===valeur; }); }
   function ouvrirExport(declencheur, format, periode){
     if(fp.ouvert) fermerFeuillePlage(false);
-    if(fc.ouvert) fermerFeuilleChrono(false);
     var d=T.dates.depuisCle(ui.ref), iso=T.dates.semaineIso(ui.ref);
     cocher('exportFormat', format||radio('exportFormat')||'detail');
     cocher('exportPeriode', periode||ui.vue);
@@ -2741,7 +2206,7 @@
       var r=muter('Importer une sauvegarde', function(e){
         var j=Object.create(null);
         Object.keys(d.jours).forEach(function(k){ j[k]=clone(d.jours[k]); });
-        e.jours=j; e.chrono=clone(d.chrono); e.projets=clone(d.projets); e.reglages=clone(d.reglages); e.recup=clone(d.recup); e.meta=clone(d.meta); e.meta.accueilVu=true;
+        e.jours=j; e.projets=clone(d.projets); e.reglages=clone(d.reglages); e.recup=clone(d.recup); e.meta=clone(d.meta); e.meta.accueilVu=true;
       });
       T.vider(RG.import); RG.import.hidden=true;
       if(r){ sigProjets=''; jtEdition=null; majReglagesUI(); toastAnnulable('Sauvegarde importée · '+pluriel(nbP, 'plage'), r.entree); focusSur($('rImporter')); }
@@ -2765,7 +2230,6 @@
     var h=global.location.hash;
     if(h==='#semaine') return 'semaine';
     if(h==='#mois') return 'mois';
-    if(h==='#pointer') return 'pointer';
     if(h==='#jour' || h==='') return 'jour';
     return null;
   }
@@ -2795,14 +2259,13 @@
   }
   function allerAujourdhui(){ allerA(ui.vue, aujourdHui()); }
   function annoncerPeriode(){
-    var ctx=contexte(maintenant());
-    if(ui.vue==='jour') T.annoncer(dateLongue(ui.ref)+', '+fmt.duree(totalJour(ui.ref, ctx)));
+    if(ui.vue==='jour') T.annoncer(dateLongue(ui.ref)+', '+fmt.duree(totalJour(ui.ref)));
     else if(ui.vue==='semaine'){
       var l=T.dates.lundiDe(ui.ref), t=0;
-      for(var i=0;i<7;i++) t+=totalJour(T.dates.ajouterJours(l, i), ctx);
+      for(var i=0;i<7;i++) t+=totalJour(T.dates.ajouterJours(l, i));
       T.annoncer('Semaine '+T.dates.semaineIso(l).semaine+', '+fmt.duree(t));
     } else {
-      var d=T.dates.depuisCle(ui.ref), r=resumeAvecVivant(d.getFullYear(), d.getMonth(), ctx), tm=0;
+      var d=T.dates.depuisCle(ui.ref), r=resumeDuMois(d.getFullYear(), d.getMonth()), tm=0;
       Object.keys(r).forEach(function(k){ tm+=r[k].min; });
       T.annoncer(T.MOIS[d.getMonth()]+' '+d.getFullYear()+', '+fmt.duree(tm));
     }
@@ -2831,7 +2294,6 @@
       }
       if(e.altKey || e.ctrlKey || e.metaKey || champ || surface || !D || !R().raccourcis) return;
       switch(e.key){
-        case 'p': case 'P': e.preventDefault(); basculerChrono(); break;
         case 'n': case 'N': e.preventDefault(); ouvrirFeuillePlage(cibleJour(), null, null, null); break;
         case 'j': case 'J': e.preventDefault(); appliquerJtRaccourci(); break;
         case 't': case 'T': e.preventDefault(); allerAujourdhui(); break;
@@ -2863,22 +2325,6 @@
       if(v && v.indexOf('+')===-1){ n.setAttribute('data-ks', v); n.removeAttribute('aria-keyshortcuts'); }
     });
   }
-  // #pointer (favori d'écran d'accueil) : vue Jour aujourd'hui, focus sur l'hexagone (halo bref) ;
-  // démarrage automatique seulement si autoPointer, chrono au repos et navigation de type « navigate ».
-  function typeNavigation(){ try{ var n=global.performance.getEntriesByType('navigation')[0]; return n?n.type:''; }catch(e){ return ''; } }
-  function traiterPointer(chargement){
-    ui.vue='jour'; ui.ref=aujourdHui(); session.ref=ui.ref; ecrireSession();
-    try{ global.history.replaceState(null, '', '#jour'); }catch(e){}
-    rendre({ anim:true, entree:true });
-    focusSur(pt.hex);
-    pt.hex.classList.remove('halo-bref'); void pt.hex.offsetWidth; pt.hex.classList.add('halo-bref');
-    setTimeout(function(){ pt.hex.classList.remove('halo-bref'); }, 1300);
-    if(chargement && R().autoPointer && !D.chrono && typeNavigation()==='navigate'){
-      var r=demarrerChrono();
-      if(r) toastAnnulable('Chrono démarré', r.entree);
-    }
-  }
-
   /* ============================================================
      16. CYCLE DE VIE & INITIALISATION
   ============================================================ */
@@ -2887,15 +2333,12 @@
     if(memoire || !D) return false;
     var t=T.stockage.lireTexte(CLE);
     if(t===dernierTexte) return false;
-    var chronoAvant=JSON.stringify(D.chrono);
-    noteEnAttente=null; if(timerNote){ clearTimeout(timerNote); timerNote=null; }
     appliquerTexte(t); viderPiles();
     if(fp.ouvert && fp.id){
       var p=plagesDe(fp.cle).filter(function(x){ return x.id===fp.id; })[0];
       if(!p || JSON.stringify(p)!==fp.origine){ fermerFeuillePlage(); T.toast({ message:'Plage modifiée dans un autre onglet', type:'info' }); }
     }
     rendre({ anim:false });
-    if(JSON.stringify(D.chrono)!==chronoAvant) T.annoncer(descriptionEtat()+' (autre onglet)');
     sigProjets=''; majReglagesUI();
     return true;
   }
@@ -2910,48 +2353,22 @@
       rechargerExterne();
     });
     doc.addEventListener('visibilitychange', function(){
-      if(doc.hidden){ viderNote(); if(timerTick){ clearTimeout(timerTick); timerTick=null; } doc.body.classList.add('h-cache'); return; }
-      doc.body.classList.remove('h-cache');
+      if(doc.hidden){ if(timerTick){ clearTimeout(timerTick); timerTick=null; } return; }
       if(!rechargerExterne()) rendre({ anim:false });
     });
     global.addEventListener('pageshow', function(e){ if(e.persisted && !rechargerExterne()) rendre({ anim:false }); });
-    global.addEventListener('pagehide', viderNote);
     global.addEventListener('hashchange', function(){
       var v=lireHash();
-      if(v==='pointer'){ traiterPointer(false); return; }
       if(v===null){ try{ global.history.replaceState(null, '', '#jour'); }catch(e){} v='jour'; }
       if(v!==ui.vue) allerA(v, ui.ref);
     });
     Array.prototype.forEach.call(doc.querySelectorAll('[data-saut]'), function(a){
-      a.addEventListener('click', function(e){
-        e.preventDefault();
-        if(a.getAttribute('data-saut')==='contenu') focusSur($('vueTitre')||$('contenu'));
-        else focusSur(pt.hex);
-      });
+      a.addEventListener('click', function(e){ e.preventDefault(); focusSur($('vueTitre')||$('contenu')); });
     });
   }
-  // Appui long (450 ms) : alternative non gestuelle = bouton ⋯ (feuille Chrono).
-  function appuiLong(b, quand, action){
-    var timer=null, declenche=false;
-    b.addEventListener('click', function(e){ if(declenche){ declenche=false; e.preventDefault(); e.stopImmediatePropagation(); } }, true);
-    b.addEventListener('pointerdown', function(e){
-      if(e.button>0 || !quand()) return;
-      declenche=false;
-      timer=setTimeout(function(){ timer=null; declenche=true; if(R().vibration) T.vibrer(10); action(); }, 450);
-    });
-    ['pointerup','pointerleave','pointercancel'].forEach(function(t){ b.addEventListener(t, function(){ if(timer){ clearTimeout(timer); timer=null; } }); });
-    b.addEventListener('contextmenu', function(e){ if(quand()) e.preventDefault(); });
-  }
-  function brancherPointeuse(){
-    appuiLong(pt.hex, function(){ return !D.chrono; }, function(){ ouvrirFeuilleChrono('demarrerA', pt.hex); });
-    appuiLong(pt.stop, function(){ return !!(D.chrono && D.chrono.e==='marche'); }, function(){ ouvrirFeuilleChrono('arreterA', pt.stop); });
-    pt.hex.addEventListener('click', function(){ basculerChrono(); });
-    pt.stop.addEventListener('click', function(){ if(arreterChrono()) focusSur(pt.hex); });
-    $('ptInfo').addEventListener('click', function(){ ouvrirFeuilleChrono(null, $('ptInfo')); });
-    $('ptPlus').addEventListener('click', function(){ ouvrirFeuilleChrono(null, $('ptPlus')); });
-    $('chronoFermer').addEventListener('click', function(){ fermerFeuilleChrono(); });
-    FC.voile.addEventListener('click', function(){ fermerFeuilleChrono(); });
-    T.glisserPourFermer($('chronoPoignee'), FC.feuille, function(){ fermerFeuilleChrono(); });
+  // Carte Balance : un toucher ouvre les réglages « Balance d'heures » (explication + date de départ).
+  function brancherBalance(){
+    bal.tap.addEventListener('click', function(){ ouvrirReglages('secBalance', bal.tap); });
   }
   function observerTopbar(){
     var tb=doc.querySelector('.topbar'); if(!tb) return;
@@ -2967,12 +2384,12 @@
     // Encre lisible des monogrammes, par teinte (contraste AA calculé par TAF.encreSur).
     for(var t=0;t<8;t++) doc.documentElement.style.setProperty('--p'+t+'-encre', T.encreSur('--p'+t, { degrade:false }));
     observerTopbar();
-    brancherFeuillePlage(); brancherExport(); construireReglages(); brancherPointeuse(); brancherSaisieGauche(); brancherClavier(); brancherCycle();
+    brancherFeuillePlage(); brancherExport(); construireReglages(); brancherBalance(); brancherSaisieGauche(); brancherClavier(); brancherCycle();
     var h=lireHash();
     if(h===null){ try{ global.history.replaceState(null, '', '#jour'); }catch(e){} h='jour'; }
-    if(h==='pointer') traiterPointer(true);
-    else { ui.vue=h; rendre({ anim:true, entree:true }); }
+    ui.vue=h; rendre({ anim:true, entree:true });
     if(memoire) T.temoin.etat('indisponible', CLE);
+    signalerChronoRetire();
   }
   init();
 })(window);

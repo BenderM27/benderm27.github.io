@@ -448,13 +448,9 @@
     egal(typeof TAF.mouvementReduit(), 'boolean'); egal(typeof TAF.vibrer(), 'boolean');
   });
 
-  /* ---------- Navigation : pastille « en cours » (pure) ---------- */
-  test('nav.etatPastille : point seul (marche / pause / rien), sans durée ni rafraîchissement', function(){
-    var maintenant=Date.UTC(2026, 9, 14, 12, 0, 0);
-    egal(TAF.nav.etatPastille(null, maintenant), null);
-    egal(TAF.nav.etatPastille({ e:'pause', tp:maintenant, s:'s_aaaaaaaaaa' }, maintenant), { etat:'pause', libelle:'chrono en pause', prochaine:null });
-    egal(TAF.nav.etatPastille({ e:'marche', t0:maintenant-(134*60000+30000) }, maintenant), { etat:'marche', libelle:'chrono en cours', prochaine:null });
-    egal(TAF.nav.etatPastille({ e:'marche', t0:'abc' }, maintenant), null, 't0 invalide');
+  test('nav : plus de pastille « en cours » (chrono retiré)', function(){
+    egal(Object.keys(TAF.nav), [ 'init' ]);
+    egal([ typeof TAF.heures.validerChrono, typeof TAF.heures.decouperSegment ], [ 'undefined', 'undefined' ]);
   });
 
   /* ---------- Impression (F12) ---------- */

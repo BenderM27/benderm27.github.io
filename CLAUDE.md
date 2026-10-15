@@ -30,7 +30,7 @@ fichiers locaux uniquement.
 | `index.html` | Module CRA (URL historique conservée) |
 | `heures.html` | Module Heures |
 | `assets/taf.css` | Socle visuel partagé : jetons, base, composants communs (topbar, navigation de modules, boutons, champs `.taf-input`, tiroir, feuilles / dialogues `.taf-feuille`, overlay, toasts, témoin, pastille tri-état), animations, view-transitions |
-| `assets/taf.js` | Noyau partagé exposé en global gelé `TAF` (API documentée en tête de fichier) : stockage sûr, sauvegarde différée partagée (`creerSauvegarde`), apparence partagée + section « Apparence » du tiroir, `gererModale`, `glisserPourFermer`, `annoncer`, toasts, utilitaires DOM sûrs, validateurs, formats fr-FR, navigation (+ pastille chrono en cours), impression (`preparerImpression`), et logique pure du module Heures `TAF.heures.*` (conversion heures → demi-journées, plan d'import CRA…) |
+| `assets/taf.js` | Noyau partagé exposé en global gelé `TAF` (API documentée en tête de fichier) : stockage sûr, sauvegarde différée partagée (`creerSauvegarde`), apparence partagée + section « Apparence » du tiroir, `gererModale`, `glisserPourFermer`, `annoncer`, toasts, utilitaires DOM sûrs, validateurs, formats fr-FR, navigation, impression (`preparerImpression`), et logique pure du module Heures `TAF.heures.*` (conversion heures → demi-journées, plan d'import CRA…) |
 | `assets/cra-donnees.js` | Validateurs purs du CRA (sans DOM, global gelé), chargés avant `cra.js` et par `tests/` |
 | `assets/cra.css`, `assets/cra.js` | Spécifique CRA (écran) |
 | `assets/cra-print.css` | Impression du CRA, liée en `media="print"` et basculée en `all` par l'auto-fit le temps de mesurer : **toute règle d'impression du CRA va ici**, jamais dans un `@media print` d'une autre feuille (elle ne serait pas prise en compte par la mesure) |
@@ -177,8 +177,8 @@ masquées, total conservé.
   tri-état…).
 - Surfaces modales : `role="dialog"`, `aria-modal`, focus déplacé / piégé /
   restitué (`gererModale`), Escape ferme la surface la plus haute.
-- `aria-live` pour les résultats d'action (pas d'annonce chaque seconde pour un
-  chronomètre) ; `aria-current` (module actif, jour courant) ; landmarks.
+- `aria-live` pour les résultats d'action (jamais d'annonce répétée en
+  continu) ; `aria-current` (module actif, jour courant) ; landmarks.
 - Contraste AA sur tous les accents personnalisés (`--on-accent` calculé).
 
 ## 7. Conventions

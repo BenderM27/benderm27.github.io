@@ -18,7 +18,6 @@
 </head>
 <body data-module="heures">
 
-  <a class="skip-link" href="#ptHex" data-saut="ptHex">Aller au chrono</a>
   <a class="skip-link" href="#contenu" data-saut="contenu">Aller au contenu</a>
   <!-- Région d'annonces de la page (TAF.annoncer) : résultats d'action, jamais un décompte à la seconde. -->
   <div class="sr-only" id="liveRegion" aria-live="polite" role="status"></div>
@@ -47,8 +46,8 @@
     </div>
   </header>
 
-  <!-- ===== Cadre : vues + contenu + Pointeuse (colonne gauche collante ≥ 1024 px) =====
-       Une seule Pointeuse (aside#pointeuse) : dock < 700 px, pilule 700–1023 px, carte ≥ 1024 px.
+  <!-- ===== Cadre : vues + contenu + Balance d'heures (colonne gauche collante ≥ 1024 px) =====
+       Une seule carte Balance (aside#gauche) : barre < 700 px, pilule 700–1023 px, carte ≥ 1024 px.
        Tout le contenu dynamique est construit par assets/heures.js (createElement + textContent). -->
   <div class="h-cadre" id="cadre">
     <nav class="h-vues" aria-label="Vues">
@@ -66,44 +65,21 @@
       <div class="h-vue" id="vue"></div>
     </main>
 
-    <aside class="h-gauche" id="pointeuse" aria-labelledby="pointeuseTitre">
-      <h2 class="sr-only" id="pointeuseTitre">Chrono</h2>
-      <div class="pt" id="pt" data-etat="repos">
-        <div class="pt-info">
-          <!-- Balance cumulée (heures sup / à rattraper) : signe + libellé + couleur, jamais la couleur seule.
-               Texte visuel masqué aux lecteurs d'écran au profit d'une phrase complète (#ptBalSr). Aucune annonce. -->
-          <p class="pt-balance" id="ptBalance" data-signe="zero">
-            <span class="pt-bal-val" id="ptBalVal" aria-hidden="true">0 min</span>
-            <span class="pt-bal-lib" id="ptBalLib" aria-hidden="true">À jour</span>
-            <span class="sr-only" id="ptBalSr">Balance d'heures : à jour</span>
-          </p>
-          <p class="pt-sous" id="ptSous"><span class="pt-etat-point" aria-hidden="true"></span><span class="pt-etat-txt" id="ptEtat"><span class="pt-etat-mot" id="ptEtatMot">Prêt</span><span class="pt-etat-suite" id="ptEtatSuite"></span></span><span class="pt-projet" id="ptProjet"></span></p>
-          <button class="pt-info-tap" id="ptInfo" type="button" aria-haspopup="dialog" aria-controls="feuilleChrono" aria-label="Détails du chrono"></button>
-        </div>
-        <div class="pt-actions">
-          <button class="pt-stop" id="ptStop" type="button" aria-label="Arrêter le chrono" hidden>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><rect x="6" y="6" width="12" height="12" rx="2.2"/></svg>
-            <span class="pt-stop-txt">Arrêter</span>
-          </button>
-          <button class="pt-hex" id="ptHex" type="button" aria-label="Démarrer le chrono" aria-keyshortcuts="P">
-            <span class="pt-hex-forme" aria-hidden="true">
-              <span class="pt-hex-int"><span class="pt-hex-g"></span><span class="pt-hex-d"></span></span>
-            </span>
-            <span class="pt-hex-contenu" aria-hidden="true">
-              <span class="pt-ic pt-ic-lecture"><svg viewBox="0 0 24 24" fill="currentColor" focusable="false"><path d="M8 5.6v12.8a1 1 0 0 0 1.52.85l10.3-6.4a1 1 0 0 0 0-1.7L9.52 4.75A1 1 0 0 0 8 5.6z"/></svg></span>
-              <span class="pt-ic pt-ic-pause"><svg viewBox="0 0 24 24" fill="currentColor" focusable="false"><rect x="6.5" y="5" width="4" height="14" rx="1.3"/><rect x="13.5" y="5" width="4" height="14" rx="1.3"/></svg></span>
-              <span class="pt-hex-lib" id="ptHexLib">Démarrer</span>
-            </span>
-          </button>
-        </div>
-        <button class="pt-plus" id="ptPlus" type="button" aria-haspopup="dialog" aria-controls="feuilleChrono" aria-label="Plus d'options du chrono" title="Plus d'options">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>
-        </button>
-        <!-- Actions secondaires visibles en carte (≥ 1024 px) ; elles ouvrent la même feuille Chrono. -->
-        <div class="pt-secondaires" id="ptSecondaires"></div>
+    <aside class="h-gauche" id="gauche" aria-labelledby="balTitre">
+      <h2 class="sr-only" id="balTitre">Balance d'heures</h2>
+      <!-- Balance cumulée (heures sup / à rattraper) : signe + libellé + couleur, jamais la couleur seule.
+           Texte visuel masqué aux lecteurs d'écran au profit d'une phrase complète (#balSr). Aucune annonce.
+           Toute la carte est un bouton (#balReglages) : explication et réglages de la balance. -->
+      <div class="h-bal" id="bal" data-signe="zero">
+        <p class="h-bal-ligne">
+          <span class="h-bal-lib" id="balLib" aria-hidden="true">À jour</span>
+          <span class="h-bal-val" id="balVal" aria-hidden="true">0 min</span>
+          <span class="sr-only" id="balSr">Balance d'heures : à jour</span>
+        </p>
+        <p class="h-bal-aide" id="balAide" aria-hidden="true"></p>
+        <svg class="h-bal-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6"/></svg>
+        <button class="h-bal-tap" id="balReglages" type="button" aria-haspopup="dialog" aria-controls="drawer" aria-describedby="balSr balAide" aria-label="Balance d'heures : explication et réglages"></button>
       </div>
-      <!-- Description textuelle de l'état, mise à jour aux SEULS changements d'état -->
-      <p class="sr-only" id="etatChrono">Chrono à l'arrêt</p>
 
       <!-- Colonne gauche (≥ 1024 px) : journée type + saisie rapide (masquée par défaut : réglage saisieRapide) -->
       <div class="h-gauche-extras" id="gaucheExtras">
@@ -195,23 +171,8 @@
     </div>
     <div class="taf-feuille-pied">
       <button class="btn ghost danger" id="plageSupprimer" type="button" hidden>Supprimer</button>
-      <button class="btn" id="plageReprendre" type="button" hidden>Reprendre
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M8 5.6v12.8a1 1 0 0 0 1.52.85l10.3-6.4a1 1 0 0 0 0-1.7L9.52 4.75A1 1 0 0 0 8 5.6z"/></svg></button>
       <button class="btn primary" id="plageEnregistrer" type="button">Enregistrer</button>
     </div>
-  </section>
-
-  <!-- ===== Feuille Chrono (une seule surface) : contenu construit selon l'état du chrono ===== -->
-  <div class="overlay overlay-feuille" id="chronoVoile"></div>
-  <section class="taf-feuille h-feuille" id="feuilleChrono" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="chronoTitre">
-    <div class="sr-only" data-taf-live aria-live="polite" role="status"></div>
-    <div class="taf-feuille-poignee" id="chronoPoignee" aria-hidden="true"><span></span></div>
-    <div class="taf-feuille-tete">
-      <h2 id="chronoTitre" tabindex="-1">Chrono</h2>
-      <button class="btn small ghost iconly" id="chronoFermer" type="button" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
-    </div>
-    <div class="taf-feuille-corps" id="chronoCorps"></div>
-    <div class="taf-feuille-pied" id="chronoPied"></div>
   </section>
 
   <!-- ===== Dialogue Export (CSV / JSON) ===== -->
@@ -271,8 +232,8 @@
       <details class="h-section" id="secSemaine" open>
         <summary>Journée et semaine</summary>
         <div class="h-section-corps">
-          <div class="h-reglage"><label for="rObjHebdo">Objectif hebdomadaire (heures)</label><input class="taf-input h-nombre" id="rObjHebdo" type="number" inputmode="decimal" min="0" max="80" step="0.25" aria-describedby="rObjHebdoAide"><p class="h-aide" id="rObjHebdoAide">0 masque la jauge de la semaine.</p></div>
-          <div class="h-reglage"><label for="rDureeJour">Durée d'une journée (heures)</label><input class="taf-input h-nombre" id="rDureeJour" type="number" inputmode="decimal" min="1" max="14" step="0.25"></div>
+          <div class="h-reglage"><label for="rObjHebdo">Objectif hebdomadaire (heures)</label><input class="taf-input h-nombre" id="rObjHebdo" type="number" inputmode="decimal" min="0" max="80" step="0.25" aria-describedby="rObjHebdoAide"><p class="h-aide" id="rObjHebdoAide">Jauge de la semaine uniquement (0 la masque). La balance d'heures compare chaque jour à la durée d'une journée.</p></div>
+          <div class="h-reglage"><label for="rDureeJour">Durée d'une journée (heures)</label><input class="taf-input h-nombre" id="rDureeJour" type="number" inputmode="decimal" min="1" max="14" step="0.25" aria-describedby="rDureeJourAide"><p class="h-aide" id="rDureeJourAide">Heures dues chaque jour ouvré : la référence de la balance d'heures et de la jauge du jour.</p></div>
           <fieldset class="h-reglage h-jours-ouvres"><legend>Jours ouvrés</legend><div class="h-jours" id="rJours"></div></fieldset>
           <div class="h-reglage"><label for="rDebut">Début habituel</label><input class="taf-input h-heure" id="rDebut" type="time" step="60"></div>
           <div class="h-reglage"><label for="rPause">Pause déjeuner (minutes)</label><input class="taf-input h-nombre" id="rPause" type="number" inputmode="numeric" min="0" max="180" step="5"></div>
@@ -290,8 +251,15 @@
       </details>
 
       <details class="h-section" id="secSaisie">
-        <summary>Saisie rapide</summary>
+        <summary>Saisie</summary>
         <div class="h-section-corps">
+          <div class="h-reglage"><label for="rArrondi">Arrondi de « Maintenant » et des durées</label>
+            <select class="field" id="rArrondi" aria-describedby="rArrondiAide"><option value="1">À la minute</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option></select>
+            <p class="h-aide" id="rArrondiAide">Fin posée par « Maintenant » et par une durée (« 2h ») ; jamais les heures tapées.</p></div>
+          <fieldset class="h-reglage"><legend>Sens de l'arrondi</legend>
+            <label class="taf-case h-case"><input type="radio" name="rMode" value="proche"><span>Au plus proche</span></label>
+            <label class="taf-case h-case"><input type="radio" name="rMode" value="favorable"><span>Favorable (vers le haut)</span></label>
+          </fieldset>
           <div class="drow"><span class="lbl" id="rSaisieRapideLib">Afficher la saisie rapide</span><label class="switch"><input type="checkbox" id="rSaisieRapide" role="switch" aria-labelledby="rSaisieRapideLib" aria-describedby="rSaisieRapideAide"><span class="track"></span><span class="thumb"></span></label></div>
           <p class="h-aide" id="rSaisieRapideAide">Un champ texte pour tout saisir d'une ligne, par exemple <span class="h-code">9-12:30 13:30-17 @projet note</span> : dans la feuille Plage et la colonne de gauche sur grand écran (raccourci <kbd>/</kbd>).</p>
         </div>
@@ -310,25 +278,6 @@
           <div class="drow"><span class="lbl" id="rRattrapageLib">Rattrapage : cocher la demi-journée la plus chargée si le total du jour atteint le seuil</span>
             <label class="switch"><input type="checkbox" id="rRattrapage" role="switch" aria-labelledby="rRattrapageLib"><span class="track"></span><span class="thumb"></span></label></div>
           <div class="h-exemple" aria-labelledby="rExempleTitre"><p class="h-label" id="rExempleTitre">Exemples avec ces réglages</p><ul class="h-exemple-liste" id="rExemple"></ul></div>
-        </div>
-      </details>
-
-      <details class="h-section" id="secChrono">
-        <summary>Chrono</summary>
-        <div class="h-section-corps">
-          <div class="h-reglage"><label for="rArrondi">Arrondi des segments du chrono</label>
-            <select class="field" id="rArrondi"><option value="1">À la minute</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option></select></div>
-          <fieldset class="h-reglage"><legend>Sens de l'arrondi</legend>
-            <label class="taf-case h-case"><input type="radio" name="rMode" value="proche"><span>Au plus proche</span></label>
-            <label class="taf-case h-case"><input type="radio" name="rMode" value="favorable"><span>Favorable (début vers le bas, fin vers le haut)</span></label>
-            <p class="h-aide">L'arrondi ne touche que le chrono et le bouton « Maintenant », jamais les heures tapées.</p>
-          </fieldset>
-          <div class="h-reglage"><label for="rAlerte">Alerte « chrono oublié » après (heures)</label><input class="taf-input h-nombre" id="rAlerte" type="number" inputmode="decimal" min="2" max="24" step="0.5"></div>
-          <div class="h-reglage"><label for="rProjetDemarrage">Projet au démarrage</label>
-            <select class="field" id="rProjetDemarrage"><option value="dernier">Dernier projet chronométré</option><option value="aucun">Aucun</option></select></div>
-          <div class="drow"><span class="lbl" id="rVibrationLib">Vibration au démarrage, à la pause et à l'arrêt</span><label class="switch"><input type="checkbox" id="rVibration" role="switch" aria-labelledby="rVibrationLib"><span class="track"></span><span class="thumb"></span></label></div>
-          <div class="drow"><span class="lbl" id="rAutoLib">Démarrer en ouvrant le favori <span class="h-code">#pointer</span></span><label class="switch"><input type="checkbox" id="rAuto" role="switch" aria-labelledby="rAutoLib"><span class="track"></span><span class="thumb"></span></label></div>
-          <p class="h-aide">Ajoutez <span class="h-code">heures.html#pointer</span> à l'écran d'accueil : le chrono démarre à l'ouverture (annulable).</p>
         </div>
       </details>
 
@@ -364,7 +313,6 @@
         <div class="h-section-corps">
           <div class="drow"><span class="lbl" id="rRaccourcisLib">Raccourcis à une touche</span><label class="switch"><input type="checkbox" id="rRaccourcis" role="switch" aria-labelledby="rRaccourcisLib"><span class="track"></span><span class="thumb"></span></label></div>
           <dl class="h-raccourcis">
-            <div><dt><kbd>P</kbd></dt><dd>Démarrer / pause</dd></div>
             <div><dt><kbd>N</kbd></dt><dd>Nouvelle plage</dd></div>
             <div><dt><kbd>J</kbd></dt><dd>Journée type</dd></div>
             <div><dt><kbd>T</kbd></dt><dd>Aujourd'hui</dd></div>
